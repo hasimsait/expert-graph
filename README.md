@@ -1,8 +1,77 @@
 # ExpertGraph: Immutable Human-Verified Knowledge Graph & MCP-UI System
+Here's my beating of the dead horse.
+it probably mocked whatever it could getaway with.
+idea is:
+>What genetic mutations were identified in breast cancer tissue samples?
+<details>
+<summary>View Raw JSON Response</summary>
+
+```json
+{
+  "facts": [
+    {
+      "edge_id": "edge_36a682ffac",
+      "subject": "Breast core biopsy",
+      "subject_type": "PATHOLOGY_SPECIMEN",
+      "relation": "FOUND_IN_SPECIMEN",
+      "object": "Invasive Ductal Carcinoma",
+      "object_type": "DISEASE_DIAGNOSIS",
+      "confidence": 0.94,
+      "approved_by": "Dr_Pathologist_Smith",
+      "timestamp": 1785927496,
+      "chunk_id": "PATH_TEST_001",
+      "chunk_text": "SPECIMEN: Breast core biopsy. DIAGNOSIS: Invasive Ductal Carcinoma. BIOMARKERS: Tumor overexpresses HER2 protein (3+ IHC score) and Estrogen Receptor is positive."
+    },
+    {
+      "edge_id": "edge_4e21960e66",
+      "subject": "Lung wedge resection",
+      "subject_type": "PATHOLOGY_SPECIMEN",
+      "relation": "FOUND_IN_SPECIMEN",
+      "object": "EGFR-mutant Non-Small Cell Lung Adenocarcinoma",
+      "object_type": "DISEASE_DIAGNOSIS",
+      "confidence": 0.94,
+      "approved_by": "thesis_annotator_1",
+      "timestamp": 1785928355,
+      "chunk_id": "PATH_TEST_002",
+      "chunk_text": "SPECIMEN: Lung wedge resection. DIAGNOSIS: EGFR-mutant Non-Small Cell Lung Adenocarcinoma. MARGINS: Resection margins are clear of tumor cells."
+    },
+    {
+      "edge_id": "edge_d01ec8386e",
+      "subject": "Thyroid fine needle aspiration",
+      "subject_type": "PATHOLOGY_SPECIMEN",
+      "relation": "FOUND_IN_SPECIMEN",
+      "object": "Papillary Thyroid Carcinoma with BRAF V600E mutation identified",
+      "object_type": "DISEASE_DIAGNOSIS",
+      "confidence": 0.94,
+      "approved_by": "thesis_annotator_1",
+      "timestamp": 1785928358,
+      "chunk_id": "PATH_TEST_003",
+      "chunk_text": "SPECIMEN: Thyroid fine needle aspiration. DIAGNOSIS: Papillary Thyroid Carcinoma with BRAF V600E mutation identified."
+    }
+  ]
+}
+```
+</details>
+=======================================================
+  LLM'S FINAL VERIFIED ANSWER
+=======================================================
+Based on the retrieved medical records, the following genetic and molecular findings were identified in breast cancer tissue samples:
+
+*   **HER2 Overexpression:** A breast core biopsy diagnosed with **Invasive Ductal Carcinoma** showed protein overexpression of **HER2** (indicated by a 3+ IHC score).
+*   **Estrogen Receptor (ER) Status:** The same specimen was identified as **Estrogen Receptor positive**.
+
+No other specific DNA mutations (such as BRCA1/2) were mentioned in the provided clinical data for breast cancer.
+
+For more details, you can view the findings in the [presentation widget](http://localhost:8000/ui/facts-widget?concept=MEDICAL_CONDITION).
+*The url would not be the generic "medical condition" but whatever was utilized for the mcp response. Youget to see when it was approved by whom and its source.*
+
+=======================================================
 
 ExpertGraph is a high-integrity graph architecture where the graph acts as an immutable ground truth verified entirely by human domain experts (pathologists, clinicians, legal analysts). 
 
 LLMs are used strictly as extraction utilities at the beginning (**The Ingestion Sieve**) and presentation layers at the end (**The MCP-UI RAG Output**). Fact presentation is controlled via **MCP Apps** (`mcp-ui`) to guarantee tamper-proof, hallucination-free display of human-approved facts.
+
+
 
 ---
 
