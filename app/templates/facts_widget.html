@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ExpertGraph Verified Facts Widget</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .glow-border { box-shadow: 0 0 15px rgba(99, 102, 241, 0.2); }
+        .glow-node { box-shadow: 0 0 10px rgba(59, 130, 246, 0.4); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 p-4 md:p-6 min-h-screen">
+    <div class="max-w-4xl mx-auto space-y-6">
+        
+        <!-- Header Banner -->
+        <div class="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-slate-900/80 border border-indigo-500/30 backdrop-blur glow-border">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-lg bg-indigo-600/30 border border-indigo-400/50 flex items-center justify-center text-indigo-400 font-bold text-xl glow-node">
+                    EG
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                        ExpertGraph Ground Truth Facts
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium">
+                            ✓ Verified Ground Truth
+                        </span>
+                    </h1>
+                    <p class="text-xs text-slate-400">
+                        Tamper-proof MCP UI presentation layer | Subclass expanded query: <code class="text-indigo-300 font-mono">{{ concept }}</code>
+                    </p>
+                </div>
+            </div>
+            <div class="text-right text-xs text-slate-400">
+                <span class="block font-medium text-slate-300">{{ facts|length }} Verified Edges</span>
+                <span class="text-slate-500">Immutable Human Approval</span>
+            </div>
+        </div>
+
+        <!-- Concept Navigation Bar -->
+        <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs">
+            <div class="flex items-center space-x-2">
+                <span class="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Filter Concept:</span>
+                <select id="conceptSelect" onchange="window.location.href='/ui/facts-widget?concept=' + this.value" class="bg-slate-950 border border-slate-700 text-indigo-300 rounded px-2.5 py-1 font-mono focus:outline-none focus:border-indigo-500">
+                    <option value="ALL" {% if concept == "ALL" %}selected{% endif %}>ALL (Every Verified Fact)</option>
+                    {% for c in available_concepts %}
+                    <option value="{{ c }}" {% if concept == c %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Quick Pills -->
+            <div class="flex flex-wrap gap-1.5 font-mono text-[11px]">
+                <a href="/ui/facts-widget?concept=ALL" class="px-2.5 py-1 rounded-md border transition-colors {% if concept == 'ALL' %}bg-indigo-600 text-white border-indigo-500{% else %}bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700{% endif %}">ALL</a>
+                <a href="/ui/facts-widget?concept=FINANCIAL_RELATION" class="px-2.5 py-1 rounded-md border transition-colors {% if concept == 'FINANCIAL_RELATION' %}bg-indigo-600 text-white border-indigo-500{% else %}bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700{% endif %}">FINANCIAL</a>
+                <a href="/ui/facts-widget?concept=MEDICAL_CONDITION" class="px-2.5 py-1 rounded-md border transition-colors {% if concept == 'MEDICAL_CONDITION' %}bg-indigo-600 text-white border-indigo-500{% else %}bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700{% endif %}">MEDICAL</a>
+                <a href="/ui/facts-widget?concept=BIOLOGICAL_PROCESS" class="px-2.5 py-1 rounded-md border transition-colors {% if concept == 'BIOLOGICAL_PROCESS' %}bg-indigo-600 text-white border-indigo-500{% else %}bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700{% endif %}">BIOLOGICAL</a>
+                <a href="/ui/facts-widget?concept=LEGAL_RELATION" class="px-2.5 py-1 rounded-md border transition-colors {% if concept == 'LEGAL_RELATION' %}bg-indigo-600 text-white border-indigo-500{% else %}bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700{% endif %}">LEGAL</a>
+            </div>
+        </div>
+
+        <!-- Facts List -->
+        {% if facts %}
+        <div class="grid gap-4">
+            {% for fact in facts %}
+            <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 transition-all duration-200 shadow-lg space-y-3">
+                
+                <!-- Edge Subject -> Relation -> Object Header -->
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                    <div class="flex items-center space-x-3 font-mono text-sm">
+                        <!-- Subject -->
+                        <span class="px-3 py-1 rounded-md bg-blue-950 text-blue-300 border border-blue-800/60 font-semibold flex items-center gap-1.5 glow-node">
+                            <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+                            {{ fact.subject }}
+                        </span>
+                        
+                        <!-- Arrow & Relation -->
+                        <div class="flex items-center text-xs text-indigo-400 font-sans px-2">
+                            <span class="text-slate-600 mr-1">───[</span>
+                            <span class="font-bold tracking-wide uppercase px-2 py-0.5 bg-indigo-950/80 border border-indigo-800/50 rounded text-indigo-300">
+                                {{ fact.relation }}
+                            </span>
+                            <span class="text-slate-600 ml-1">]───►</span>
+                        </div>
+                        
+                        <!-- Object -->
+                        <span class="px-3 py-1 rounded-md bg-purple-950 text-purple-300 border border-purple-800/60 font-semibold flex items-center gap-1.5 glow-node">
+                            <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                            {{ fact.object }}
+                        </span>
+                    </div>
+
+                    <!-- Status Badge -->
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs px-2.5 py-1 rounded-md bg-emerald-950 text-emerald-400 border border-emerald-800/80 font-medium">
+                            Approved by {{ fact.approved_by or "Thesis Annotator" }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Provenance & Source Text Chunk -->
+                {% if fact.chunk_text %}
+                <div class="p-3 rounded-lg bg-slate-950 border border-slate-800 text-xs space-y-1">
+                    <div class="flex items-center justify-between text-slate-400 font-mono text-[11px]">
+                        <span>Chunk ID: {{ fact.chunk_id }}</span>
+                        <span>Confidence: {{ "%.2f"|format(fact.confidence or 0.95) }}</span>
+                    </div>
+                    <p class="text-slate-300 italic">"{{ fact.chunk_text }}"</p>
+                </div>
+                {% endif %}
+
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-8 text-center rounded-xl bg-slate-900 border border-slate-800 text-slate-400 space-y-2">
+            <p class="text-sm font-medium">No verified ground truth facts found matching concept <code class="text-indigo-400 font-mono">{{ concept }}</code>.</p>
+            <p class="text-xs text-slate-500">Run the Sieve ingestion pipeline and approve pending facts in the Annotator Dashboard.</p>
+        </div>
+        {% endif %}
+
+        <!-- Footer -->
+        <div class="text-center text-xs text-slate-600 border-t border-slate-900 pt-4">
+            ExpertGraph Architecture • MCP Apps UI Presentation Standard (_meta.ui.resourceUri)
+        </div>
+
+    </div>
+</body>
+</html>
