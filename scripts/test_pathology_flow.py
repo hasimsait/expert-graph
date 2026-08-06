@@ -3,11 +3,10 @@ import os
 import json
 import logging
 import asyncio
-from fastapi.testclient import TestClient
+import httpx
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.main import app
 from app.config import settings
 from app.db.ontology_loader import load_custom_ontology_json
 
@@ -29,7 +28,7 @@ SAMPLE_PATHOLOGY_CHUNKS = [
     }
 ]
 
-def run_pathology_flow():
+async def run_pathology_flow(server_url:str = "http://localhost:8000"):
     print("\n========================================================================")
     print("      EXPERTGRAPH PATHOLOGY SIEVE & GROUND TRUTH TEST FLOW")
     print("========================================================================\n")
@@ -40,10 +39,10 @@ def run_pathology_flow():
     print(f"    • Endpoint: {settings.LLM_BASE_URL if settings.LLM_PROVIDER != 'openai' else 'OpenAI Cloud'}")
     print(f"    • Max Tokens: {settings.MAX_TOKENS}\n")
 
-    with TestClient(app) as client:
+    async with httpx.AsyncClient(base_url=server_url,timeout=120.0) as client:
         # Step 1: Reset Database & Queue State
         print("Step 1: Resetting Database & Queue State...")
-        reset_res = client.post("/api/reset")
+        reset_res = await client.post("/api/reset")
         assert reset_res.status_code == 200
         print("  ✓ Database & Queue reset cleanly.\n")
 
@@ -51,14 +50,14 @@ def run_pathology_flow():
         print("Step 2: Loading Medical Ontology Domain Baseline into Meta-Graph...")
         sample_json_path = os.path.join(os.path.dirname(__file__), "sample_medical_ontology.json")
         if os.path.exists(sample_json_path):
-            ont_res = asyncio.run(load_custom_ontology_json(sample_json_path))
+            ont_res = await load_custom_ontology_json(sample_json_path)
             print(f"  ✓ Loaded Medical Ontology: {ont_res['concepts_loaded']} concepts, {ont_res['relationships_loaded']} meta-relationships.\n")
 
         # Step 3: Ingest Pathology Chunks through Sieve API
         print("Step 3: Ingesting Pathology Reports through Sieve (Extractor -> Critic -> Graph)...")
         total_triples = 0
         for chunk in SAMPLE_PATHOLOGY_CHUNKS:
-            res = client.post("/api/ingest", json={"chunk_id": chunk["chunk_id"], "text": chunk["text"]})
+            res = await client.post("/api/ingest", json={"chunk_id": chunk["chunk_id"], "text": chunk["text"]})
             assert res.status_code == 200
             count = res.json()["triples_ingested"]
             total_triples += count
@@ -68,7 +67,7 @@ def run_pathology_flow():
 
         # Step 4: Fetch Pending Queue
         print("Step 4: Fetching Pending Queue for Pathologist Annotation ('/api/queue')...")
-        queue_res = client.get("/api/queue?limit=20")
+        queue_res = await client.get("/api/queue?limit=20")
         assert queue_res.status_code == 200
         queue = queue_res.json()["queue"]
         print(f"  ✓ Pending Queue Count: {len(queue)} candidate edges awaiting approval.\n")
@@ -88,20 +87,20 @@ def run_pathology_flow():
         # Step 5: Simulate Pathologist Approvals
         print("Step 5: Simulating Pathologist Approvals ('/api/approve')...")
         for edge in queue:
-            app_res = client.post(f"/api/approve/{edge['edge_id']}", json={"user_id": "Dr_Pathologist_Smith"})
+            app_res = await client.post(f"/api/approve/{edge['edge_id']}", json={"user_id": "Dr_Pathologist_Smith"})
             assert app_res.status_code == 200
             print(f"  ✓ Edge '{edge['edge_id']}' approved by Dr_Pathologist_Smith.")
 
         # Step 6: Verify Live Stats
         print("\nStep 6: Checking Live Stats ('/api/stats')...")
-        stats_res = client.get("/api/stats")
+        stats_res = await client.get("/api/stats")
         assert stats_res.status_code == 200
         stats = stats_res.json()
         print(f"  ✓ Live Stats -> Pending: {stats['pending']} | Approved: {stats['approved']} | Rejected: {stats['rejected']}\n")
 
         # Step 7: Test Dynamic RAG Widget Rendering
         print("Step 7: Testing Dynamic RAG Widget Rendering ('/ui/facts-widget')...")
-        widget_res = client.get("/ui/facts-widget?concept=MEDICAL_CONDITION")
+        widget_res = await client.get("/ui/facts-widget?concept=MEDICAL_CONDITION")
         assert widget_res.status_code == 200
         print("  ✓ Dynamic MCP-UI Widget generated successfully for MEDICAL_CONDITION query.")
 
@@ -115,4 +114,5 @@ def run_pathology_flow():
     print("========================================================================\n")
 
 if __name__ == "__main__":
-    run_pathology_flow()
+    server = sys.argv[1] if len(sys.argv)>1 else "http://localhost:8000"
+    asyncio.run(run_pathology_flow(server))

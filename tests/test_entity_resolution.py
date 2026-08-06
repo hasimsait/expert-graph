@@ -5,7 +5,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from app.services.entity_resolution import EntityResolver, get_entity_resolver, reset_entity_resolver
 from app.module_a_sieve.schemas import ExtractionOutput, ExtractedTriple, Entity, CriticEvaluation
 from app.module_a_sieve.ingester import ingest_sieve_output
-from app.db.neo4j_client import run_cypher
 
 MOCK_ONTOLOGY = {
     "C001": "Invasive Ductal Carcinoma",
@@ -91,3 +90,34 @@ async def test_graph_ingester_entity_resolution_integration():
     
     # Cleanup global resolver
     reset_entity_resolver(None)
+
+@pytest.mark.anyio
+async def test_dynamic_entity_resolver_refresh_on_approval():
+    """Verify that approving an edge dynamically refreshes EntityResolver ontology in real-time."""
+    from app.db.repository import get_graph_repository
+    repo = get_graph_repository()
+    await repo.reset_graph()
+    reset_entity_resolver(None)
+
+    # 1. Initially, concept 'HER2 Biomarker' is not in repo
+    resolver = await get_entity_resolver(repo=repo)
+    assert resolver.resolve_entity("HER2 Biomarker") is None
+
+    # 2. Add new concept to repo canonical concepts and add an edge
+    repo.canonical_concepts["C_HER2"] = {"name": "HER2 Biomarker"}
+    repo.add_edge({
+        "edge_id": "edge_her2_dynamic",
+        "subject": {"name": "Invasive Ductal Carcinoma", "type": "DISEASE"},
+        "relation": "EXPRESSES",
+        "object": {"name": "HER2 Biomarker", "type": "GENE_BIOMARKER"},
+        "status": "pending",
+        "chunk_id": "chk_dynamic_01"
+    })
+
+    # 3. Approve the edge -> triggers automatic EntityResolver reload
+    await repo.update_edge_status("edge_her2_dynamic", "approved", "Dr_Smith")
+
+    # 4. Verify EntityResolver now dynamically resolves 'HER2 Biomarker'
+    res = resolver.resolve_entity("HER2 Biomarker")
+    assert res is not None
+    assert res["canonical_name"] == "HER2 Biomarker"

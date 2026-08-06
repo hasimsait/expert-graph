@@ -2,7 +2,7 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from app.db.neo4j_client import run_cypher
+from app.db.neo4j_client import run_cypher, Neo4jConnection
 from tests.mocks.mock_graph import mock_graph_store
 
 client = TestClient(app)
@@ -45,6 +45,7 @@ def setup_module(module):
     """
     try:
         asyncio.run(run_cypher(seed_cypher))
+        asyncio.run(Neo4jConnection.reset_driver())
     except Exception:
         pass
 

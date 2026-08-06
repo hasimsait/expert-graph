@@ -111,9 +111,15 @@ class Neo4jGraphRepository(GraphRepository):
         results = await run_cypher(cypher, {"edge_id": edge_id, "status": status, "user_id": user_id})
         if results:
             from app.services.tfidf_retrieval import TFIDFRetriever
+            from app.services.entity_resolution import get_entity_resolver
             if status == "approved":
                 for rec in results:
                     TFIDFRetriever.add_fact_delta(rec)
+                try:
+                    resolver = await get_entity_resolver()
+                    await resolver.load_ontology_from_db()
+                except Exception as e:
+                    logger.warning("Error refreshing EntityResolver on edge approval: %s", e)
             elif status in ["rejected", "deleted"]:
                 for rec in results:
                     TFIDFRetriever.remove_fact_delta(rec.get("edge_id") or edge_id)

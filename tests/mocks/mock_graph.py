@@ -161,7 +161,14 @@ class InMemoryGraphRepository(GraphRepository):
                 updated = True
         if updated:
             from app.services.tfidf_retrieval import TFIDFRetriever
+            from app.services.entity_resolution import get_entity_resolver
             TFIDFRetriever.invalidate_cache()
+            if status == "approved":
+                try:
+                    resolver = await get_entity_resolver(repo=self)
+                    await resolver.load_ontology_from_db(repo=self)
+                except Exception:
+                    pass
         return updated
 
     async def get_approved_facts(self, query: str = "ALL") -> List[Dict[str, Any]]:

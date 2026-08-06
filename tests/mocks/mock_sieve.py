@@ -2,7 +2,7 @@ import re
 from typing import List
 from app.module_a_sieve.schemas import ExtractionOutput, ExtractedTriple, Entity, ConceptMapping, CriticEvaluation
 
-async def test_mock_extract(chunk_id: str, chunk_text: str) -> ExtractionOutput:
+async def mock_sieve_extract(chunk_id: str, chunk_text: str) -> ExtractionOutput:
     """Rule-based extractor used exclusively in unit test suite asynchronously."""
     triples: List[ExtractedTriple] = []
     
@@ -59,7 +59,7 @@ async def test_mock_extract(chunk_id: str, chunk_text: str) -> ExtractionOutput:
 
     return ExtractionOutput(chunk_id=chunk_id, chunk_text=chunk_text, triples=triples)
 
-async def test_mock_evaluate(extraction: ExtractionOutput) -> List[CriticEvaluation]:
+async def mock_sieve_evaluate(extraction: ExtractionOutput) -> List[CriticEvaluation]:
     """Rule-based critic evaluator used exclusively in unit test suite asynchronously."""
     results = []
     for i, _ in enumerate(extraction.triples):
@@ -70,3 +70,7 @@ async def test_mock_evaluate(extraction: ExtractionOutput) -> List[CriticEvaluat
             critique_notes="Test mock critique verification"
         ))
     return results
+
+# Aliases for backward compatibility
+test_mock_extract = mock_sieve_extract
+test_mock_evaluate = mock_sieve_evaluate
