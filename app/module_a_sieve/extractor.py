@@ -15,14 +15,20 @@ Follow these strict rules:
 3. Never hallucinate facts that are not explicitly stated in the chunk text.
 """
 
-def extract_triples(chunk_id: str, chunk_text: str) -> ExtractionOutput:
-    """Extract structured triples using Instructor LLM (OpenAI, Ollama, Llama.cpp, vLLM, Gemma)."""
+async def extract_triples(chunk_id: str, chunk_text: str) -> ExtractionOutput:
+    """Extract structured triples using Instructor LLM asynchronously (OpenAI, Ollama, Llama.cpp, vLLM, Gemma)."""
     start_time = time.time()
     provider = settings.LLM_PROVIDER.lower().replace("-", "_")
     
     try:
-        from openai import OpenAI
+        from openai import AsyncOpenAI
         base_url = settings.LLM_BASE_URL if provider != "openai" else None
+        if base_url:
+            if not (base_url.startswith("http://") or base_url.startswith("https://")):
+                base_url = f"http://{base_url}"
+            if not base_url.endswith("/v1") and not base_url.endswith("/v1/"):
+                base_url = f"{base_url.rstrip('/')}/v1"
+
         api_key = settings.OPENAI_API_KEY if settings.OPENAI_API_KEY else "local"
         
         logger.info("--> [Extractor Start] chunk_id: '%s' | Model: '%s' | Provider: '%s' | Endpoint: '%s'", chunk_id, settings.LLM_MODEL, provider, base_url or "OpenAI Cloud")
@@ -30,8 +36,8 @@ def extract_triples(chunk_id: str, chunk_text: str) -> ExtractionOutput:
         logger.info("--> [Extractor Input Text] %s", chunk_text)
 
         mode = instructor.Mode.MD_JSON if provider != "openai" else instructor.Mode.TOOLS
-        client = instructor.from_openai(OpenAI(base_url=base_url, api_key=api_key), mode=mode)
-        result = client.chat.completions.create(
+        client = instructor.from_openai(AsyncOpenAI(base_url=base_url, api_key=api_key), mode=mode)
+        result = await client.chat.completions.create(
             model=settings.LLM_MODEL,
             response_model=ExtractionOutput,
             max_tokens=settings.MAX_TOKENS,

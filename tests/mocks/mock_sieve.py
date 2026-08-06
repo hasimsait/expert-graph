@@ -2,8 +2,8 @@ import re
 from typing import List
 from app.module_a_sieve.schemas import ExtractionOutput, ExtractedTriple, Entity, ConceptMapping, CriticEvaluation
 
-def test_mock_extract(chunk_id: str, chunk_text: str) -> ExtractionOutput:
-    """Rule-based extractor used exclusively in unit test suite."""
+async def test_mock_extract(chunk_id: str, chunk_text: str) -> ExtractionOutput:
+    """Rule-based extractor used exclusively in unit test suite asynchronously."""
     triples: List[ExtractedTriple] = []
     
     specimen_match = re.search(r'SPECIMEN:\s*([^.]+?\b(?:biopsy|resection|aspiration|tissue|lesion)\b[^.]*?)(?=\.|\s+DIAGNOSIS|$)', chunk_text, re.IGNORECASE)
@@ -59,8 +59,8 @@ def test_mock_extract(chunk_id: str, chunk_text: str) -> ExtractionOutput:
 
     return ExtractionOutput(chunk_id=chunk_id, chunk_text=chunk_text, triples=triples)
 
-def test_mock_evaluate(extraction: ExtractionOutput) -> List[CriticEvaluation]:
-    """Rule-based critic evaluator used exclusively in unit test suite."""
+async def test_mock_evaluate(extraction: ExtractionOutput) -> List[CriticEvaluation]:
+    """Rule-based critic evaluator used exclusively in unit test suite asynchronously."""
     results = []
     for i, _ in enumerate(extraction.triples):
         results.append(CriticEvaluation(

@@ -80,21 +80,27 @@ def validate_and_apply_typo_corrections(
 
     return triple
 
-def evaluate_triples(extraction: ExtractionOutput) -> List[CriticEvaluation]:
-    """Evaluate triples using Adversarial Critic LLM (OpenAI, Ollama, Llama.cpp, vLLM, Gemma)."""
+async def evaluate_triples(extraction: ExtractionOutput) -> List[CriticEvaluation]:
+    """Evaluate triples using Adversarial Critic LLM asynchronously (OpenAI, Ollama, Llama.cpp, vLLM, Gemma)."""
     start_time = time.time()
     provider = settings.LLM_PROVIDER.lower().replace("-", "_")
     
     try:
-        from openai import OpenAI
+        from openai import AsyncOpenAI
         base_url = settings.LLM_BASE_URL if provider != "openai" else None
+        if base_url:
+            if not (base_url.startswith("http://") or base_url.startswith("https://")):
+                base_url = f"http://{base_url}"
+            if not base_url.endswith("/v1") and not base_url.endswith("/v1/"):
+                base_url = f"{base_url.rstrip('/')}/v1"
+
         api_key = settings.OPENAI_API_KEY if settings.OPENAI_API_KEY else "local"
         
         logger.info("--> [Critic Start] chunk_id: '%s' | Model: '%s' | Evaluating %d triples", extraction.chunk_id, settings.LLM_MODEL, len(extraction.triples))
         logger.info("--> [Critic Prompt] System: %s", CRITIC_SYSTEM_PROMPT.strip())
         
         mode = instructor.Mode.MD_JSON if provider != "openai" else instructor.Mode.TOOLS
-        client = instructor.from_openai(OpenAI(base_url=base_url, api_key=api_key), mode=mode)
+        client = instructor.from_openai(AsyncOpenAI(base_url=base_url, api_key=api_key), mode=mode)
         
         prompt_content = f"Chunk Text:\n{extraction.chunk_text}\n\nProposed Triples:\n"
         for idx, t in enumerate(extraction.triples):
@@ -105,7 +111,7 @@ def evaluate_triples(extraction: ExtractionOutput) -> List[CriticEvaluation]:
         class BatchCriticEvaluation(instructor.OpenAISchema):
             evaluations: List[CriticEvaluation]
 
-        res = client.chat.completions.create(
+        res = await client.chat.completions.create(
             model=settings.LLM_MODEL,
             response_model=BatchCriticEvaluation,
             max_tokens=settings.MAX_TOKENS,

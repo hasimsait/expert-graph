@@ -16,7 +16,7 @@ async def retrieve_verified_facts(query: str = "ALL") -> str:
     Arguments:
         query: Search query, topic, or concept to retrieve facts for (e.g. 'breast cancer', 'HER2', 'mutation', 'OWES_DEBT', or 'ALL').
     """
-    facts = fetch_approved_facts(query=query)
+    facts = await fetch_approved_facts(query=query)
     base_url = getattr(settings, "BASE_URL", "http://localhost:8000")
     ui_resource_uri = f"{base_url}/ui/facts-widget?concept={query}"
     

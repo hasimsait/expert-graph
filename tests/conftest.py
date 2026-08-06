@@ -1,5 +1,6 @@
 import sys
 import os
+import asyncio
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pytest
@@ -23,5 +24,5 @@ def setup_test_repository(monkeypatch):
     monkeypatch.setattr("app.module_b_annotator.router.evaluate_triples", test_mock_evaluate)
     
     yield test_repo
-    test_repo.reset_graph()
+    asyncio.run(test_repo.reset_graph())
     set_graph_repository(Neo4jGraphRepository())

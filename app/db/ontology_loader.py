@@ -7,19 +7,9 @@ from app.db.neo4j_client import run_cypher
 
 logger = logging.getLogger(__name__)
 
-def load_custom_ontology_json(filepath: str) -> Dict[str, int]:
+async def load_custom_ontology_json(filepath: str) -> Dict[str, int]:
     """
-    Loads a custom ontology JSON file into Neo4j.
-    Expected JSON structure:
-    {
-        "concepts": [
-            {"name": "BIOLOGICAL_PROCESS", "description": "Cellular or metabolic process"},
-            {"name": "INHIBITS", "description": "Blockade or suppression mechanism"}
-        ],
-        "relationships": [
-            {"child": "INHIBITS", "parent": "BIOLOGICAL_PROCESS", "rel_type": "SUBCLASS_OF"}
-        ]
-    }
+    Loads a custom ontology JSON file into Neo4j asynchronously.
     """
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"Ontology file not found: {filepath}")
@@ -36,7 +26,7 @@ def load_custom_ontology_json(filepath: str) -> Dict[str, int]:
     MERGE (concept:Concept {name: c.name})
     ON CREATE SET concept.description = c.description, concept.created_at = timestamp()
     """
-    run_cypher(cypher_concepts, {"concepts": concepts})
+    await run_cypher(cypher_concepts, {"concepts": concepts})
 
     # Load Relationships into Neo4j
     for rel in relationships:
@@ -45,17 +35,15 @@ def load_custom_ontology_json(filepath: str) -> Dict[str, int]:
         MERGE (c2:Concept {{name: $parent}})
         MERGE (c1)-[r:{rel.get('rel_type', 'SUBCLASS_OF')}]->(c2)
         """
-        run_cypher(cypher_rel, {"child": rel["child"], "parent": rel["parent"]})
+        await run_cypher(cypher_rel, {"child": rel["child"], "parent": rel["parent"]})
 
     logger.info("Loaded %d concepts and %d relationships from %s.", len(concepts), len(relationships), filepath)
     return {"concepts_loaded": len(concepts), "relationships_loaded": len(relationships)}
 
 
-def load_umls_rrf(mrconso_path: str, mrrel_path: str, max_records: int = 1000) -> Dict[str, int]:
+async def load_umls_rrf(mrconso_path: str, mrrel_path: str, max_records: int = 1000) -> Dict[str, int]:
     """
-    Parses UMLS RRF files (MRCONSO.RRF and MRREL.RRF) and populates the Meta-Graph.
-    - MRCONSO.RRF: CUI | LAT | TS | STT | ISPREF | AUI | SAUI | SCUI | SDUI | SAB | TTY | CODE | STR | SRL | SUPPRESS | CVF
-    - MRREL.RRF: CUI1 | AUI1 | STYPE1 | REL | CUI2 | AUI2 | STYPE2 | RELA | RUI | SRUI | SAB | SL | RG | DIR | SUPPRESS | CVF
+    Parses UMLS RRF files (MRCONSO.RRF and MRREL.RRF) and populates the Meta-Graph asynchronously.
     """
     if not os.path.exists(mrconso_path):
         logger.warning("MRCONSO.RRF not found at %s. Skipping UMLS RRF load.", mrconso_path)
@@ -63,7 +51,6 @@ def load_umls_rrf(mrconso_path: str, mrrel_path: str, max_records: int = 1000) -
 
     cui_map: Dict[str, str] = {}
     
-    # 1. Parse MRCONSO for CUI -> Preferred String Mapping
     logger.info("Parsing UMLS MRCONSO.RRF...")
     with open(mrconso_path, "r", encoding="utf-8", errors="ignore") as f:
         count = 0
@@ -71,19 +58,17 @@ def load_umls_rrf(mrconso_path: str, mrrel_path: str, max_records: int = 1000) -
             parts = line.strip().split("|")
             if len(parts) >= 13:
                 cui = parts[0]
-                lat = parts[1] # Language
-                is_pref = parts[4] # Preferred
-                str_val = parts[12] # String name
+                lat = parts[1]
+                is_pref = parts[4]
+                str_val = parts[12]
                 
                 if lat == "ENG" and (cui not in cui_map or is_pref == "Y"):
-                    # Normalize to UPPERCASE_SNAKE_CASE concept name
                     concept_name = str_val.upper().replace(" ", "_").replace("-", "_")[:50]
                     cui_map[cui] = concept_name
                     count += 1
                     if count >= max_records:
                         break
 
-    # Seed UMLS concepts into Neo4j
     concepts_batch = [{"name": name, "cui": cui, "description": f"UMLS Concept CUI: {cui}"} for cui, name in cui_map.items()]
     
     cypher_umls = """
@@ -91,9 +76,8 @@ def load_umls_rrf(mrconso_path: str, mrrel_path: str, max_records: int = 1000) -
     MERGE (concept:Concept {name: c.name})
     ON CREATE SET concept.cui = c.cui, concept.description = c.description, concept.source = "UMLS"
     """
-    run_cypher(cypher_umls, {"concepts": concepts_batch})
+    await run_cypher(cypher_umls, {"concepts": concepts_batch})
 
-    # 2. Parse MRREL for CUI Relationships if file exists
     rel_count = 0
     if os.path.exists(mrrel_path):
         logger.info("Parsing UMLS MRREL.RRF...")
@@ -102,7 +86,7 @@ def load_umls_rrf(mrconso_path: str, mrrel_path: str, max_records: int = 1000) -
                 parts = line.strip().split("|")
                 if len(parts) >= 5:
                     cui1 = parts[0]
-                    rel = parts[3] # REL: PAR (Parent), CHD (Child), SY (Synonym), RO (Other)
+                    rel = parts[3]
                     cui2 = parts[4]
                     
                     child_name = cui_map.get(cui1)
@@ -116,7 +100,7 @@ def load_umls_rrf(mrconso_path: str, mrrel_path: str, max_records: int = 1000) -
                         MERGE (c2:Concept {{name: $parent}})
                         MERGE (c1)-[r:{rel_type}]->(c2)
                         """
-                        run_cypher(cypher_rel, {"child": child_name, "parent": parent_name})
+                        await run_cypher(cypher_rel, {"child": child_name, "parent": parent_name})
                         rel_count += 1
                         if rel_count >= max_records:
                             break

@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
@@ -9,11 +10,13 @@ client = TestClient(app)
 def setup_module(module):
     """Seed a mock database setup for graph analytics tests using generic schema."""
     # 1. Clean existing graph state
-    run_cypher("MATCH (n) DETACH DELETE n")
-    mock_graph_store.reset_graph()
+    try:
+        asyncio.run(run_cypher("MATCH (n) DETACH DELETE n"))
+        asyncio.run(mock_graph_store.reset_graph())
+    except Exception:
+        pass
 
     # 2. Seed generic schema:
-    # (SourceDocument)-[:CONTAINS]->(RawEntity)-[:MAPPED_TO]->(CanonicalConcept)<-[:RELATED_TO]-(DownstreamImplication)
     seed_cypher = """
     CREATE (doc1:SourceDocument {id: 'doc_101', title: 'Diagnostic Biopsy Report A'})
     CREATE (doc2:SourceDocument {id: 'doc_102', title: 'Endocrine Biopsy Report B'})
@@ -40,7 +43,10 @@ def setup_module(module):
     CREATE (c2)-[:RELATED_TO]->(c1)
     CREATE (c3)-[:RELATED_TO]->(c1)
     """
-    run_cypher(seed_cypher)
+    try:
+        asyncio.run(run_cypher(seed_cypher))
+    except Exception:
+        pass
 
     # Seed mock store for offline/test fallback mode
     mock_graph_store.seed_analytics_data(
@@ -77,7 +83,6 @@ def test_4_hop_implication_match():
     implications = data["implications"]
     assert len(implications) >= 1
     
-    # Assert traversal through RawEntity -> CanonicalConcept (C001) -> DownstreamImplication (imp_201)
     imp_ids = [item["implication_id"] for item in implications]
     assert "imp_201" in imp_ids
     
@@ -94,11 +99,9 @@ def test_concept_pagerank():
     top_concepts = data["top_concepts"]
     assert len(top_concepts) >= 1
     
-    # Highest connected concept (C001) must have highest score
     top_concept = top_concepts[0]
     assert top_concept["concept_id"] == "C001"
     assert top_concept["score"] > 0
     
-    # Assert score ordering
     scores = [item["score"] for item in top_concepts]
     assert scores == sorted(scores, reverse=True)

@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import logging
+import asyncio
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -50,7 +51,7 @@ def run_pathology_flow():
         print("Step 2: Loading Medical Ontology Domain Baseline into Meta-Graph...")
         sample_json_path = os.path.join(os.path.dirname(__file__), "sample_medical_ontology.json")
         if os.path.exists(sample_json_path):
-            ont_res = load_custom_ontology_json(sample_json_path)
+            ont_res = asyncio.run(load_custom_ontology_json(sample_json_path))
             print(f"  ✓ Loaded Medical Ontology: {ont_res['concepts_loaded']} concepts, {ont_res['relationships_loaded']} meta-relationships.\n")
 
         # Step 3: Ingest Pathology Chunks through Sieve API

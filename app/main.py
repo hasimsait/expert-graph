@@ -21,7 +21,7 @@ async def lifespan(fastapi_app: FastAPI):
     """Initialise shared resources on startup; gracefully clean up on shutdown."""
     logger.info("Starting ExpertGraph server — initializing Dual Graph database schema...")
     try:
-        init_db_schema()
+        await init_db_schema()
     except Exception as e:
         logger.warning("Database initialization warning: %s", e)
     
@@ -32,7 +32,7 @@ async def lifespan(fastapi_app: FastAPI):
 
     logger.info("Shutting down ExpertGraph server — closing Neo4j database driver connection...")
     try:
-        Neo4jConnection.close()
+        await Neo4jConnection.close()
         logger.info("Neo4j driver connection closed cleanly.")
     except Exception as e:
         logger.error("Error closing Neo4j driver connection: %s", e)

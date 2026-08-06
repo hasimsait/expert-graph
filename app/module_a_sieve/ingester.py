@@ -9,15 +9,15 @@ from app.services.entity_resolution import get_entity_resolver
 
 logger = logging.getLogger(__name__)
 
-def ingest_sieve_output(
+async def ingest_sieve_output(
     extraction: ExtractionOutput,
     evaluations: List[CriticEvaluation],
     repo: GraphRepository = None
 ) -> SieveResult:
-    """Ingest Critic-verified triples into graph database with status 'pending'."""
+    """Ingest Critic-verified triples into graph database asynchronously with status 'pending'."""
     timestamp = int(time.time())
     processed_records = []
-    resolver = get_entity_resolver()
+    resolver = await get_entity_resolver()
     active_repo = repo or get_graph_repository()
     
     # Store/Merge Chunk
@@ -25,7 +25,7 @@ def ingest_sieve_output(
     MERGE (ch:Chunk {id: $chunk_id})
     ON CREATE SET ch.text = $chunk_text, ch.created_at = $timestamp
     """
-    run_cypher(chunk_cypher, {
+    await run_cypher(chunk_cypher, {
         "chunk_id": extraction.chunk_id,
         "chunk_text": extraction.chunk_text,
         "timestamp": timestamp
@@ -54,7 +54,7 @@ def ingest_sieve_output(
             MERGE (c2:Concept {{name: $existing_concept}})
             MERGE (c1)-[:{triple.concept_mapping.mapping_type}]->(c2)
             """
-            run_cypher(concept_cypher, {
+            await run_cypher(concept_cypher, {
                 "new_relation": triple.concept_mapping.new_relation,
                 "existing_concept": triple.concept_mapping.existing_concept
             })
@@ -94,7 +94,7 @@ def ingest_sieve_output(
             "timestamp": timestamp
         }
 
-        db_result = run_cypher(ingest_cypher, params)
+        db_result = await run_cypher(ingest_cypher, params)
 
         # Entity Resolution (ER) step: Map raw strings to canonical ontology concept
         subj_res = resolver.resolve_entity(triple.subject.name)
@@ -109,7 +109,7 @@ def ingest_sieve_output(
             ON CREATE SET m.confidence = $confidence
             ON MATCH SET m.confidence = $confidence
             """
-            run_cypher(map_cypher, {
+            await run_cypher(map_cypher, {
                 "chunk_id": extraction.chunk_id,
                 "raw_string": triple.subject.name,
                 "canonical_id": subj_res["canonical_id"],
@@ -129,7 +129,7 @@ def ingest_sieve_output(
             ON CREATE SET m.confidence = $confidence
             ON MATCH SET m.confidence = $confidence
             """
-            run_cypher(map_cypher, {
+            await run_cypher(map_cypher, {
                 "chunk_id": extraction.chunk_id,
                 "raw_string": triple.object.name,
                 "canonical_id": obj_res["canonical_id"],
@@ -151,7 +151,6 @@ def ingest_sieve_output(
             "object_resolution": obj_res
         }
 
-        # If running in test mode with in-memory repository, append record
         if hasattr(active_repo, "add_edge"):
             active_repo.add_edge(record)
 

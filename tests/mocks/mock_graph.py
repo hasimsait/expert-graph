@@ -114,7 +114,7 @@ class InMemoryGraphRepository(GraphRepository):
                 "rel_type": rel_type
             }
 
-    def expand_meta_graph_concept(self, concept_name: str) -> List[str]:
+    async def expand_meta_graph_concept(self, concept_name: str) -> List[str]:
         root = concept_name.upper()
         results = {root}
         changed = True
@@ -136,7 +136,7 @@ class InMemoryGraphRepository(GraphRepository):
             )
         self.edges.append(edge_dict)
 
-    def get_pending_queue(self, limit: int = 20) -> List[Dict[str, Any]]:
+    async def get_pending_queue(self, limit: int = 20) -> List[Dict[str, Any]]:
         pending = []
         for edge in self.edges:
             if edge.get("status") == "pending":
@@ -150,7 +150,7 @@ class InMemoryGraphRepository(GraphRepository):
                     break
         return pending
 
-    def update_edge_status(self, edge_id: str, status: str, user_id: str) -> bool:
+    async def update_edge_status(self, edge_id: str, status: str, user_id: str) -> bool:
         now = int(time.time())
         updated = False
         for edge in self.edges:
@@ -161,7 +161,7 @@ class InMemoryGraphRepository(GraphRepository):
                 updated = True
         return updated
 
-    def get_approved_facts(self, query: str = "ALL") -> List[Dict[str, Any]]:
+    async def get_approved_facts(self, query: str = "ALL") -> List[Dict[str, Any]]:
         search_term = (query or "ALL").strip()
         concept_upper = search_term.upper()
 
@@ -189,7 +189,7 @@ class InMemoryGraphRepository(GraphRepository):
         from app.services.tfidf_retrieval import TFIDFRetriever
         return TFIDFRetriever.rank_facts(search_term, all_approved)
 
-    def get_stats(self) -> Dict[str, int]:
+    async def get_stats(self) -> Dict[str, int]:
         stats = {"pending": 0, "approved": 0, "rejected": 0}
         for edge in self.edges:
             st = edge.get("status", "pending")
@@ -204,7 +204,7 @@ class InMemoryGraphRepository(GraphRepository):
         self.downstream_implications = implications
         self.concept_links = concept_links or []
 
-    def get_document_implications(self, document_id: str) -> List[Dict[str, Any]]:
+    async def get_document_implications(self, document_id: str) -> List[Dict[str, Any]]:
         results = []
         raw_entities = getattr(self, "raw_entities", [])
         canonical_concepts = getattr(self, "canonical_concepts", {})
@@ -234,7 +234,7 @@ class InMemoryGraphRepository(GraphRepository):
                     })
         return results
 
-    def run_concept_pagerank(self) -> List[Dict[str, Any]]:
+    async def run_concept_pagerank(self) -> List[Dict[str, Any]]:
         canonical_concepts = getattr(self, "canonical_concepts", {})
         if not canonical_concepts:
             return []
@@ -267,7 +267,7 @@ class InMemoryGraphRepository(GraphRepository):
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:10]
 
-    def get_all_documents(self) -> List[Dict[str, Any]]:
+    async def get_all_documents(self) -> List[Dict[str, Any]]:
         docs = []
         for doc_id, doc in self.documents.items():
             docs.append({"id": doc_id, "title": doc.get("title", doc_id), "type": "SourceDocument"})
@@ -281,7 +281,7 @@ class InMemoryGraphRepository(GraphRepository):
                 docs.append({"id": chunk_id, "title": title, "type": "Chunk"})
         return docs
 
-    def reset_graph(self) -> None:
+    async def reset_graph(self) -> None:
         self.edges = []
         self.documents = {}
         self.raw_entities = []

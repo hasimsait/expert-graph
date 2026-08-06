@@ -31,18 +31,17 @@ def test_critic_rejects_unrelated_freetext_substitution():
         relation="ASSOCIATED_GENE",
         object=Entity(name="HER2", type="GENE")
     )
-    # Critic attempts completely different freetext substitution
     corrections = [TypoCorrection(original_typo="Carcinoma", replacement="Heart Failure")]
     fixed = validate_and_apply_typo_corrections(triple, corrections, "Invasive Ductal Carcinoma biopsy")
     
-    # Should reject edit because similarity is low and replacement is not in text
     assert fixed.subject.name == "Invasive Ductal Carcinoma"
 
-def test_graph_analytics_implications_and_pagerank():
+@pytest.mark.anyio
+async def test_graph_analytics_implications_and_pagerank():
     repo = get_graph_repository()
     
-    implications = repo.get_document_implications("doc_101")
+    implications = await repo.get_document_implications("doc_101")
     assert isinstance(implications, list)
     
-    pagerank = repo.run_concept_pagerank()
+    pagerank = await repo.run_concept_pagerank()
     assert isinstance(pagerank, list)

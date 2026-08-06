@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class EntityResolver:
     """
     Plug-and-play Entity Resolution using scikit-learn TF-IDF and Cosine Similarity.
-    Loads a single-domain canonical JSON ontology at runtime or dynamically from Neo4j DB.
+    Loads a single-domain canonical JSON ontology at runtime or dynamically from Neo4j DB asynchronously.
     """
     def __init__(
         self,
@@ -32,8 +32,6 @@ class EntityResolver:
             path = ontology_path or getattr(settings, "ONTOLOGY_PATH", None) or os.getenv("ONTOLOGY_PATH")
             if path and os.path.exists(path):
                 self.load_ontology_file(path)
-            else:
-                self.load_ontology_from_db()
 
     def load_ontology_dict(self, ontology_dict: Dict[str, str]) -> None:
         self.ontology = dict(ontology_dict)
@@ -49,8 +47,8 @@ class EntityResolver:
             data = json.load(f)
         self.load_ontology_dict(data)
 
-    def load_ontology_from_db(self) -> None:
-        """Dynamically load active ontology concepts from active graph repository."""
+    async def load_ontology_from_db(self) -> None:
+        """Dynamically load active ontology concepts from active graph repository asynchronously."""
         try:
             from app.db.neo4j_client import run_cypher
             cypher_query = """
@@ -58,7 +56,7 @@ class EntityResolver:
             WHERE c:CanonicalConcept OR c:Concept
             RETURN COALESCE(c.id, c.name) AS id, COALESCE(c.name, c.id) AS name
             """
-            results = run_cypher(cypher_query)
+            results = await run_cypher(cypher_query)
             if results:
                 db_dict = {r["id"]: r["name"] for r in results if r.get("id") and r.get("name")}
                 if db_dict:
@@ -107,11 +105,13 @@ class EntityResolver:
 
 _resolver_instance: Optional[EntityResolver] = None
 
-def get_entity_resolver() -> EntityResolver:
-    """Get global EntityResolver singleton or initialize standard instance."""
+async def get_entity_resolver() -> EntityResolver:
+    """Get global EntityResolver singleton or initialize standard instance asynchronously."""
     global _resolver_instance
     if _resolver_instance is None:
         _resolver_instance = EntityResolver()
+        if not _resolver_instance.ontology:
+            await _resolver_instance.load_ontology_from_db()
     return _resolver_instance
 
 def reset_entity_resolver(resolver: Optional[EntityResolver] = None) -> None:

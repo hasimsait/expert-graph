@@ -11,9 +11,9 @@ router = APIRouter(tags=["MCP UI Widget"])
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-def get_available_concepts(repo: GraphRepository):
-    """Fetch distinct concept names that actually have approved facts in the Data-Graph."""
-    approved_facts = repo.get_approved_facts("ALL")
+async def get_available_concepts(repo: GraphRepository):
+    """Fetch distinct concept names that actually have approved facts in the Data-Graph asynchronously."""
+    approved_facts = await repo.get_approved_facts("ALL")
     active_concepts = set()
     for fact in approved_facts:
         rel = fact.get("relation")
@@ -22,15 +22,15 @@ def get_available_concepts(repo: GraphRepository):
     return sorted(list(active_concepts))
 
 @router.get("/ui/facts-widget", response_class=HTMLResponse)
-def render_facts_widget(
+async def render_facts_widget(
     request: Request,
     concept: str = Query("ALL"),
     repo: GraphRepository = Depends(get_graph_repository)
 ):
-    """Dynamic Jinja2 HTML widget compliant with mcp-ui standard."""
+    """Dynamic Jinja2 HTML widget compliant with mcp-ui standard asynchronously."""
     active_concept = concept.strip() if concept else "ALL"
-    facts = fetch_approved_facts(active_concept, repo=repo)
-    available_concepts = get_available_concepts(repo)
+    facts = await fetch_approved_facts(active_concept, repo=repo)
+    available_concepts = await get_available_concepts(repo)
     
     return templates.TemplateResponse(
         request=request,

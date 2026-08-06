@@ -60,7 +60,8 @@ def test_ontology_loading_from_env(tmp_path, monkeypatch):
     assert res is not None
     assert res["canonical_id"] == "C001"
 
-def test_graph_ingester_entity_resolution_integration():
+@pytest.mark.anyio
+async def test_graph_ingester_entity_resolution_integration():
     """Test that Graph Ingester performs ER and maps raw text entities to canonical concepts."""
     resolver = EntityResolver(ontology_dict=MOCK_ONTOLOGY)
     reset_entity_resolver(resolver)
@@ -80,7 +81,7 @@ def test_graph_ingester_entity_resolution_integration():
         CriticEvaluation(triple_index=0, is_valid=True, confidence=0.95, critique_notes="Valid diagnosis")
     ]
     
-    sieve_res = ingest_sieve_output(extraction, evaluations)
+    sieve_res = await ingest_sieve_output(extraction, evaluations)
     assert len(sieve_res.processed_triples) == 1
     processed = sieve_res.processed_triples[0]
     

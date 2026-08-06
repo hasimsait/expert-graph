@@ -62,12 +62,12 @@ DEFAULT_META_GRAPH_EDGES = [
     ("SUED", "LAWSUIT_AGAINST", "SYNONYM_OF")
 ]
 
-def init_db_schema():
-    """Create constraints and seed Meta-Graph ontology baseline."""
-    logger.info("Initializing Neo4j Dual Graph constraints...")
+async def init_db_schema():
+    """Create constraints and seed Meta-Graph ontology baseline asynchronously."""
+    logger.info("Initializing Neo4j Dual Graph constraints asynchronously...")
     for constraint_cypher in INITIAL_CONSTRAINTS:
         try:
-            run_cypher(constraint_cypher)
+            await run_cypher(constraint_cypher)
         except Exception as e:
             logger.warning("Error running constraint query: %s", e)
 
@@ -77,7 +77,7 @@ def init_db_schema():
         MERGE (c:Concept {name: $name})
         ON CREATE SET c.description = $description, c.created_at = timestamp()
         """
-        run_cypher(query, concept)
+        await run_cypher(query, concept)
 
     # Seed Meta-Graph Edges (MERGE concept nodes first to ensure existence)
     for child, parent, rel_type in DEFAULT_META_GRAPH_EDGES:
@@ -86,7 +86,7 @@ def init_db_schema():
         MERGE (c2:Concept {{name: $parent}})
         MERGE (c1)-[r:{rel_type}]->(c2)
         """
-        run_cypher(query, {"child": child, "parent": parent})
+        await run_cypher(query, {"child": child, "parent": parent})
 
     # Seed baseline Graph Analytics nodes & relationships
     seed_analytics_cypher = """
@@ -116,7 +116,7 @@ def init_db_schema():
     MERGE (c3)-[:RELATED_TO]->(c1)
     """
     try:
-        run_cypher(seed_analytics_cypher)
+        await run_cypher(seed_analytics_cypher)
     except Exception as e:
         logger.warning("Error seeding baseline Graph Analytics cypher: %s", e)
 

@@ -7,22 +7,23 @@ from app.module_c_mcp.retrieval import expand_meta_graph_concept, fetch_approved
 
 client = TestClient(app)
 
-def test_sieve_pipeline():
+@pytest.mark.anyio
+async def test_sieve_pipeline():
     chunk_id = "test_chk_101"
     text = "Acme Corp owes $500,000 to Horizon Bank."
     
     # 1. Extractor
-    extraction = extractor.extract_triples(chunk_id, text)
+    extraction = await extractor.extract_triples(chunk_id, text)
     assert len(extraction.triples) > 0
     assert extraction.triples[0].relation in ["OWES_DEBT", "DEBT_OBLIGATION"]
     
     # 2. Critic
-    evals = critic.evaluate_triples(extraction)
+    evals = await critic.evaluate_triples(extraction)
     assert len(evals) == len(extraction.triples)
     assert evals[0].is_valid is True
     
     # 3. Ingester
-    sieve_res = ingest_sieve_output(extraction, evals)
+    sieve_res = await ingest_sieve_output(extraction, evals)
     assert len(sieve_res.processed_triples) > 0
     assert sieve_res.processed_triples[0]["status"] == "pending"
 
@@ -53,12 +54,13 @@ def test_annotator_api():
     stats = stats_res.json()
     assert stats["approved"] >= 1
 
-def test_meta_expansion_and_retrieval():
-    concepts = expand_meta_graph_concept("FINANCIAL_RELATION")
+@pytest.mark.anyio
+async def test_meta_expansion_and_retrieval():
+    concepts = await expand_meta_graph_concept("FINANCIAL_RELATION")
     assert isinstance(concepts, list)
     assert "FINANCIAL_RELATION" in concepts
 
-    facts = fetch_approved_facts("OWES_DEBT")
+    facts = await fetch_approved_facts("OWES_DEBT")
     assert isinstance(facts, list)
 
 def test_mcp_ui_widget_endpoint():
