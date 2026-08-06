@@ -64,9 +64,11 @@ def validate_and_apply_typo_corrections(
             logger.info("Rejected Critic typo fix '%s' -> '%s' (similarity %.2f too low and replacement not in text)", typo, rep, sim)
             continue
 
+        pattern = r'\b' + re.escape(typo) + r'\b'
+
         # Subject Replacement
-        if typo.lower() in triple.subject.name.lower():
-            triple.subject.name = re.sub(re.escape(typo), rep, triple.subject.name, flags=re.IGNORECASE)
+        if re.search(pattern, triple.subject.name, flags=re.IGNORECASE):
+            triple.subject.name = re.sub(pattern, rep, triple.subject.name, flags=re.IGNORECASE)
             logger.info("Accepted Critic typo edit in subject: '%s' -> '%s' (Result: '%s')", typo, rep, triple.subject.name)
         else:
             words = triple.subject.name.split()
@@ -81,8 +83,8 @@ def validate_and_apply_typo_corrections(
             triple.subject.name = " ".join(new_words)
 
         # Object Replacement
-        if typo.lower() in triple.object.name.lower():
-            triple.object.name = re.sub(re.escape(typo), rep, triple.object.name, flags=re.IGNORECASE)
+        if re.search(pattern, triple.object.name, flags=re.IGNORECASE):
+            triple.object.name = re.sub(pattern, rep, triple.object.name, flags=re.IGNORECASE)
             logger.info("Accepted Critic typo edit in object: '%s' -> '%s' (Result: '%s')", typo, rep, triple.object.name)
         else:
             words = triple.object.name.split()

@@ -41,6 +41,10 @@ class GraphRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_canonical_concepts(self) -> Dict[str, str]:
+        pass
+
+    @abstractmethod
     async def reset_graph(self) -> None:
         pass
 
@@ -155,9 +159,15 @@ class Neo4jGraphRepository(GraphRepository):
             db_facts = await run_cypher(cypher)
         else:
             import re
-            tokens = [t.lower() for t in re.findall(r'\b[a-zA-Z0-9]{3,}\b', search_term)]
+            raw_tokens = [t.strip().lower() for t in re.split(r'\s+', search_term) if t.strip()]
+            tokens = []
+            for t in raw_tokens:
+                clean_t = re.sub(r'^[^\w-]+|[^\w-]+$', '', t)
+                if len(clean_t) >= 2:
+                    tokens.append(clean_t)
+
             if not tokens:
-                tokens = [search_term.lower()]
+                tokens = [search_term.strip().lower()]
 
             token_conditions = []
             token_params = {}
@@ -323,6 +333,15 @@ class Neo4jGraphRepository(GraphRepository):
         LIMIT 50
         """
         return await run_cypher(cypher)
+
+    async def get_canonical_concepts(self) -> Dict[str, str]:
+        cypher = """
+        MATCH (c)
+        WHERE c:CanonicalConcept OR c:Concept
+        RETURN COALESCE(c.id, c.name) AS id, COALESCE(c.name, c.id) AS name
+        """
+        results = await run_cypher(cypher)
+        return {r["id"]: r["name"] for r in results if r.get("id") and r.get("name")}
 
     async def reset_graph(self) -> None:
         cypher = "MATCH (n) DETACH DELETE n"

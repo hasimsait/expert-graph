@@ -284,6 +284,14 @@ class InMemoryGraphRepository(GraphRepository):
                 docs.append({"id": chunk_id, "title": title, "type": "Chunk"})
         return docs
 
+    async def get_canonical_concepts(self) -> Dict[str, str]:
+        concepts_dict = {}
+        for name in self.meta_concepts:
+            concepts_dict[name] = name
+        for c_id, c in getattr(self, "canonical_concepts", {}).items():
+            concepts_dict[c_id] = c.get("name", c_id)
+        return concepts_dict
+
     async def reset_graph(self) -> None:
         self.edges = []
         self.documents = {}

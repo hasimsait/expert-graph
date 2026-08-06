@@ -138,3 +138,26 @@ async def test_unmocked_tfidf_retrieval_with_mock_graph_store():
     updated_her2_facts = await repo.get_approved_facts("HER2")
     assert len(updated_her2_facts) == 2
     assert {f["edge_id"] for f in updated_her2_facts} == {"edge_path_001", "edge_pending_001"}
+
+@pytest.mark.anyio
+async def test_hyphenated_clinical_term_tokenization():
+    """Verify that clinical hyphenated terms (PD-L1, HER2-neu, COVID-19, ER) are preserved cleanly."""
+    repo = InMemoryGraphRepository()
+    await repo.reset_graph()
+    TFIDFRetriever.reset_cache()
+
+    repo.add_edge({
+        "edge_id": "edge_pdl1",
+        "subject": {"name": "Non-Small Cell Lung Carcinoma", "type": "DISEASE_DIAGNOSIS"},
+        "relation": "EXPRESSES_BIOMARKER",
+        "object": {"name": "PD-L1", "type": "GENE_BIOMARKER"},
+        "confidence": 0.99,
+        "status": "approved",
+        "approved_by": "Dr_Pathologist",
+        "chunk_id": "chk_pdl1_01",
+        "chunk_text": "Tumor tissue section demonstrates high PD-L1 expression (>50% TPS score)."
+    })
+
+    pdl1_facts = await repo.get_approved_facts("PD-L1")
+    assert len(pdl1_facts) == 1
+    assert pdl1_facts[0]["object"] == "PD-L1"

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class EntityResolver:
     """
     Plug-and-play Entity Resolution using scikit-learn TF-IDF and Cosine Similarity.
-    Loads a single-domain canonical JSON ontology at runtime or dynamically from Neo4j DB asynchronously.
+    Loads a single-domain canonical JSON ontology at runtime or dynamically from GraphRepository asynchronously.
     """
     def __init__(
         self,
@@ -47,32 +47,17 @@ class EntityResolver:
             data = json.load(f)
         self.load_ontology_dict(data)
 
-    async def load_ontology_from_db(self) -> None:
-        """Dynamically load active ontology concepts from active graph repository asynchronously."""
-        try:
-            from app.db.neo4j_client import run_cypher
-            cypher_query = """
-            MATCH (c)
-            WHERE c:CanonicalConcept OR c:Concept
-            RETURN COALESCE(c.id, c.name) AS id, COALESCE(c.name, c.id) AS name
-            """
-            results = await run_cypher(cypher_query)
-            if results:
-                db_dict = {r["id"]: r["name"] for r in results if r.get("id") and r.get("name")}
-                if db_dict:
-                    self.load_ontology_dict(db_dict)
-                    return
-        except Exception as e:
-            logger.warning("Error fetching ontology concepts from Neo4j: %s", e)
-
+    async def load_ontology_from_db(self, repo: Optional[Any] = None) -> None:
+        """Dynamically load active ontology concepts via GraphRepository abstraction asynchronously."""
         try:
             from app.db.repository import get_graph_repository
-            repo = get_graph_repository()
-            concepts = getattr(repo, "canonical_concepts", {})
-            if concepts:
-                self.load_ontology_dict({c_id: c.get("name", c_id) for c_id, c in concepts.items()})
+            active_repo = repo or get_graph_repository()
+            concepts_dict = await active_repo.get_canonical_concepts()
+            if concepts_dict:
+                self.load_ontology_dict(concepts_dict)
+                logger.info("Loaded %d ontology concepts via GraphRepository.", len(concepts_dict))
         except Exception as e:
-            logger.warning("Error loading fallback concepts from repository: %s", e)
+            logger.warning("Error fetching ontology concepts from GraphRepository: %s", e)
 
     def resolve_entity(self, raw_string: str) -> Optional[Dict[str, Any]]:
         """
@@ -105,13 +90,13 @@ class EntityResolver:
 
 _resolver_instance: Optional[EntityResolver] = None
 
-async def get_entity_resolver() -> EntityResolver:
+async def get_entity_resolver(repo: Optional[Any] = None) -> EntityResolver:
     """Get global EntityResolver singleton or initialize standard instance asynchronously."""
     global _resolver_instance
     if _resolver_instance is None:
         _resolver_instance = EntityResolver()
         if not _resolver_instance.ontology:
-            await _resolver_instance.load_ontology_from_db()
+            await _resolver_instance.load_ontology_from_db(repo=repo)
     return _resolver_instance
 
 def reset_entity_resolver(resolver: Optional[EntityResolver] = None) -> None:

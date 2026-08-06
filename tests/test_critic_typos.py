@@ -36,6 +36,20 @@ def test_critic_rejects_unrelated_freetext_substitution():
     
     assert fixed.subject.name == "Invasive Ductal Carcinoma"
 
+def test_critic_word_boundary_prevents_substring_corruption():
+    """Verify that typo 'art' -> 'heart' does NOT corrupt 'Artery' into 'Heartery' or 'Cartilage' into 'Cheartilage'."""
+    triple = ExtractedTriple(
+        subject=Entity(name="Coronary Artery Disease", type="DISEASE"),
+        relation="AFFECTS",
+        object=Entity(name="Costal Cartilage", type="ANATOMY")
+    )
+    corrections = [TypoCorrection(original_typo="art", replacement="heart")]
+    fixed = validate_and_apply_typo_corrections(triple, corrections, "Patient has heart disease and coronary artery issues.")
+    
+    # Must remain 'Coronary Artery Disease' and 'Costal Cartilage', not 'Heartery' or 'Cheartilage'
+    assert fixed.subject.name == "Coronary Artery Disease"
+    assert fixed.object.name == "Costal Cartilage"
+
 @pytest.mark.anyio
 async def test_graph_analytics_implications_and_pagerank():
     repo = get_graph_repository()
