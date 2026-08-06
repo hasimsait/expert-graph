@@ -3,7 +3,6 @@ import os
 import json
 import asyncio
 from openai import OpenAI
-
 import logging
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -19,17 +18,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "retrieve_verified_facts",
-            "description": "Retrieves human-verified ground truth facts from the ExpertGraph Neo4j database for a concept domain (e.g. MEDICAL_CONDITION, BIOLOGICAL_PROCESS, OWES_DEBT, ALL).",
+            "description": "Retrieves human-verified ground truth facts from the ExpertGraph database for a search query. Pass query with relevant topic terms (e.g. query='breast cancer', query='HER2', query='mutation', query='ALL').",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "concept": {
-                        "type": "string",
-                        "description": "The concept domain to retrieve approved facts for (e.g. 'MEDICAL_CONDITION', 'BIOLOGICAL_PROCESS', 'ALL')"
-                    },
                     "query": {
                         "type": "string",
-                        "description": "Optional search query term"
+                        "description": "The search query or concept topic to retrieve ground truth facts for (e.g. 'breast cancer', 'HER2', 'mutation', 'ALL')"
                     }
                 }
             }
@@ -55,7 +50,7 @@ def ask_llama_with_mcp(user_question: str):
     messages = [
         {
             "role": "system", 
-            "content": "You are an expert clinical AI assistant. Use the retrieve_verified_facts tool to query human-verified ground-truth facts from the ExpertGraph database before answering clinical questions. Synthesize a clear, concise medical answer based strictly on the retrieved ground-truth facts, and mention the mcp-ui presentation widget URL provided in the metadata."
+            "content": "You are an expert AI assistant. Always use the retrieve_verified_facts tool with specific search query terms to query ground-truth facts from ExpertGraph before answering. Synthesize a clear answer based strictly on the retrieved facts and include the mcp-ui presentation widget URL."
         },
         {"role": "user", "content": user_question}
     ]
@@ -86,8 +81,8 @@ def ask_llama_with_mcp(user_question: str):
                 })
         elif message.content and ("retrieve_verified_facts" in message.content):
             import re
-            logger.info("Detected Qwen/Gemma text-based tool call in response content.")
-            args_dict = {"concept": "MEDICAL_CONDITION"}
+            logger.info("Detected text-based tool call in response content.")
+            args_dict = {"query": user_question}
             match = re.search(r'call:retrieve_verified_facts\s*\{([^}]+)\}', message.content)
             if match:
                 raw_args = match.group(1)
@@ -107,10 +102,10 @@ def ask_llama_with_mcp(user_question: str):
                 print(f"--> LLM invoked MCP Tool: '{func_name}' with args: {func_args}")
                 
                 if func_name == "retrieve_verified_facts":
-                    target_param = func_args.get("query") or func_args.get("concept") or "MEDICAL_CONDITION"
+                    query_val = func_args.get("query") or user_question
                     
                     # Step 3: Execute ExpertGraph MCP Tool
-                    tool_output = asyncio.run(retrieve_verified_facts(concept=target_param))
+                    tool_output = asyncio.run(retrieve_verified_facts(query=query_val))
                     print(f"\n<-- ExpertGraph MCP Tool Output:\n{tool_output}\n")
                     
                     # Append tool result back to message history

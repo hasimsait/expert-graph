@@ -9,18 +9,19 @@ logger = logging.getLogger(__name__)
 mcp_app = FastMCP("ExpertGraph-MCP-Server")
 
 @mcp_app.tool()
-async def retrieve_verified_facts(concept: str = "ALL", query: str = None) -> str:
+async def retrieve_verified_facts(query: str = "ALL") -> str:
     """
-    Retrieves human-verified ground truth graph facts for a concept domain or query.
-    Performs Meta-Graph subclass expansion to include child concepts.
-    Returns facts JSON along with _meta.ui.resourceUri targeting the secure mcp-ui presentation widget.
+    Retrieves human-verified ground truth facts from the ExpertGraph Neo4j database for a search query or concept domain.
+    
+    Arguments:
+        query: Search query, topic, or concept to retrieve facts for (e.g. 'breast cancer', 'HER2', 'mutation', 'OWES_DEBT', or 'ALL').
     """
-    target_concept = query or concept or "ALL"
-    facts = fetch_approved_facts(target_concept)
-    ui_resource_uri = f"{settings.BASE_URL}/ui/facts-widget?concept={target_concept}"
+    facts = fetch_approved_facts(query=query)
+    base_url = getattr(settings, "BASE_URL", "http://localhost:8000")
+    ui_resource_uri = f"{base_url}/ui/facts-widget?concept={query}"
     
     payload = {
-        "concept": concept,
+        "query": query,
         "verified_facts_count": len(facts),
         "facts": facts,
         "_meta": {

@@ -4,13 +4,12 @@ import json
 import logging
 from typing import List, Dict, Any, Optional
 from app.db.neo4j_client import run_cypher
-from app.db.mock_graph import mock_graph_store
 
 logger = logging.getLogger(__name__)
 
 def load_custom_ontology_json(filepath: str) -> Dict[str, int]:
     """
-    Loads a custom ontology JSON file into Neo4j (and mock store).
+    Loads a custom ontology JSON file into Neo4j.
     Expected JSON structure:
     {
         "concepts": [
@@ -48,13 +47,6 @@ def load_custom_ontology_json(filepath: str) -> Dict[str, int]:
         """
         run_cypher(cypher_rel, {"child": rel["child"], "parent": rel["parent"]})
 
-        # Also register in mock store
-        mock_graph_store.add_meta_concept(
-            rel["child"],
-            rel["parent"],
-            rel.get("rel_type", "SUBCLASS_OF")
-        )
-
     logger.info("Loaded %d concepts and %d relationships from %s.", len(concepts), len(relationships), filepath)
     return {"concepts_loaded": len(concepts), "relationships_loaded": len(relationships)}
 
@@ -91,7 +83,7 @@ def load_umls_rrf(mrconso_path: str, mrrel_path: str, max_records: int = 1000) -
                     if count >= max_records:
                         break
 
-    # Seed UMLS concepts into Neo4j & Mock Store
+    # Seed UMLS concepts into Neo4j
     concepts_batch = [{"name": name, "cui": cui, "description": f"UMLS Concept CUI: {cui}"} for cui, name in cui_map.items()]
     
     cypher_umls = """
@@ -100,9 +92,6 @@ def load_umls_rrf(mrconso_path: str, mrrel_path: str, max_records: int = 1000) -
     ON CREATE SET concept.cui = c.cui, concept.description = c.description, concept.source = "UMLS"
     """
     run_cypher(cypher_umls, {"concepts": concepts_batch})
-
-    for c in concepts_batch:
-        mock_graph_store.add_meta_concept(c["name"], "MEDICAL_CONCEPT", "SUBCLASS_OF")
 
     # 2. Parse MRREL for CUI Relationships if file exists
     rel_count = 0
@@ -128,7 +117,6 @@ def load_umls_rrf(mrconso_path: str, mrrel_path: str, max_records: int = 1000) -
                         MERGE (c1)-[r:{rel_type}]->(c2)
                         """
                         run_cypher(cypher_rel, {"child": child_name, "parent": parent_name})
-                        mock_graph_store.add_meta_concept(child_name, parent_name, rel_type)
                         rel_count += 1
                         if rel_count >= max_records:
                             break

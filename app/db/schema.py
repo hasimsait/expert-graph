@@ -9,7 +9,13 @@ INITIAL_CONSTRAINTS = [
     
     # Data-Graph constraints
     "CREATE CONSTRAINT entity_name IF NOT EXISTS FOR (e:Entity) REQUIRE e.name IS UNIQUE;",
-    "CREATE CONSTRAINT chunk_id IF NOT EXISTS FOR (ch:Chunk) REQUIRE ch.id IS UNIQUE;"
+    "CREATE CONSTRAINT chunk_id IF NOT EXISTS FOR (ch:Chunk) REQUIRE ch.id IS UNIQUE;",
+
+    # Graph Analytics & Entity Resolution constraints
+    "CREATE CONSTRAINT source_doc_id IF NOT EXISTS FOR (d:SourceDocument) REQUIRE d.id IS UNIQUE;",
+    "CREATE CONSTRAINT raw_entity_name IF NOT EXISTS FOR (r:RawEntity) REQUIRE r.name IS UNIQUE;",
+    "CREATE CONSTRAINT canonical_concept_id IF NOT EXISTS FOR (c:CanonicalConcept) REQUIRE c.id IS UNIQUE;",
+    "CREATE CONSTRAINT downstream_imp_id IF NOT EXISTS FOR (i:DownstreamImplication) REQUIRE i.id IS UNIQUE;"
 ]
 
 DEFAULT_META_GRAPH_CONCEPTS = [
@@ -82,4 +88,36 @@ def init_db_schema():
         """
         run_cypher(query, {"child": child, "parent": parent})
 
-    logger.info("Meta-Graph ontology initialized successfully.")
+    # Seed baseline Graph Analytics nodes & relationships
+    seed_analytics_cypher = """
+    MERGE (doc1:SourceDocument {id: 'doc_101'}) ON CREATE SET doc1.title = 'Diagnostic Biopsy Report A'
+    MERGE (doc2:SourceDocument {id: 'doc_102'}) ON CREATE SET doc2.title = 'Endocrine Biopsy Report B'
+
+    MERGE (raw1:RawEntity {name: 'invasive ductal breast carcinoma'})
+    MERGE (raw2:RawEntity {name: 'papillary thyroid carcinoma'})
+
+    MERGE (c1:CanonicalConcept {id: 'C001'}) ON CREATE SET c1.name = 'Invasive Ductal Carcinoma'
+    MERGE (c2:CanonicalConcept {id: 'C002'}) ON CREATE SET c2.name = 'Papillary Thyroid Carcinoma'
+    MERGE (c3:CanonicalConcept {id: 'C003'}) ON CREATE SET c3.name = 'General Oncology Hub'
+
+    MERGE (imp1:DownstreamImplication {id: 'imp_201'}) ON CREATE SET imp1.name = 'Targeted Chemotherapy Regimen', imp1.description = 'HER2 targeted therapy indicated'
+    MERGE (imp2:DownstreamImplication {id: 'imp_202'}) ON CREATE SET imp2.name = 'Thyroidectomy Evaluation', imp2.description = 'Surgical excision recommended'
+
+    MERGE (doc1)-[:CONTAINS]->(raw1)
+    MERGE (doc2)-[:CONTAINS]->(raw2)
+
+    MERGE (raw1)-[:MAPPED_TO {confidence: 0.95}]->(c1)
+    MERGE (raw2)-[:MAPPED_TO {confidence: 0.91}]->(c2)
+
+    MERGE (c1)<-[:RELATED_TO]-(imp1)
+    MERGE (c2)<-[:RELATED_TO]-(imp2)
+
+    MERGE (c2)-[:RELATED_TO]->(c1)
+    MERGE (c3)-[:RELATED_TO]->(c1)
+    """
+    try:
+        run_cypher(seed_analytics_cypher)
+    except Exception as e:
+        logger.warning("Error seeding baseline Graph Analytics cypher: %s", e)
+
+    logger.info("Meta-Graph ontology and Graph Analytics schema initialized successfully.")

@@ -8,6 +8,7 @@ from app.config import settings
 from app.db.schema import init_db_schema
 from app.module_b_annotator.router import router as annotator_router
 from app.module_c_mcp.ui_widget import router as ui_widget_router
+from app.api.analytics import router as analytics_router
 from app.module_c_mcp.mcp_server import mcp_http
 
 from app.db.neo4j_client import Neo4jConnection
@@ -47,8 +48,9 @@ async def health() -> dict:
         "mcp_endpoint": "/mcp"
     }
 
-# Include Annotator API and UI Widget routes
+# Include Annotator API, Analytics API, and UI Widget routes
 app.include_router(annotator_router)
+app.include_router(analytics_router)
 app.include_router(ui_widget_router)
 
 # Mount static React Annotator Dashboard build & assets

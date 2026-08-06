@@ -1,16 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import StatsHeader from './components/StatsHeader';
+import FactCard from './components/FactCard';
+import AnalyticsModal from './components/AnalyticsModal';
 import { 
-  Check, 
-  X, 
-  ChevronRight, 
   Keyboard, 
   Send, 
-  Layers, 
-  FileText, 
-  Share2, 
-  AlertCircle,
-  ExternalLink
+  FileText
 } from 'lucide-react';
 
 export default function App() {
@@ -21,6 +16,7 @@ export default function App() {
   const [ingestText, setIngestText] = useState('');
   const [ingesting, setIngesting] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
 
   const fetchQueueAndStats = useCallback(async () => {
     setLoading(true);
@@ -131,7 +127,11 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 font-sans">
       
       {/* Top Header */}
-      <StatsHeader stats={stats} onRefresh={fetchQueueAndStats} />
+      <StatsHeader
+        stats={stats}
+        onRefresh={fetchQueueAndStats}
+        onOpenAnalytics={() => setIsAnalyticsOpen(true)}
+      />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -213,143 +213,26 @@ export default function App() {
 
         {/* Right Side: Candidate Graph Edge Verification Card (7 cols) */}
         <div className="lg:col-span-7 flex flex-col">
-          
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl flex-1 flex flex-col justify-between relative overflow-hidden">
-            
-            {/* Feedback Floating Banner */}
-            {feedback && (
-              <div className={`absolute top-4 right-4 px-4 py-2 rounded-xl font-bold text-xs shadow-xl animate-bounce border ${
-                feedback.type === 'success' ? 'bg-emerald-950 text-emerald-300 border-emerald-500' : 'bg-rose-950 text-rose-300 border-rose-500'
-              }`}>
-                {feedback.msg}
-              </div>
-            )}
-
-            <div>
-              {/* Card Header */}
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
-                <div>
-                  <h2 className="text-base font-bold text-white flex items-center gap-2">
-                    Proposed Data-Graph Edge
-                    <span className="text-xs font-mono font-normal text-slate-400">
-                      ({currentIndex + 1} of {queue.length})
-                    </span>
-                  </h2>
-                  <p className="text-xs text-slate-400">Cross-referenced against Meta-Graph ontology</p>
-                </div>
-                
-                <a 
-                  href="/ui/facts-widget" 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 bg-indigo-950/50 border border-indigo-800/40 px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  <span>Preview MCP-UI Widget</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
-
-              {loading ? (
-                <div className="py-24 text-center text-slate-400 text-sm">
-                  Loading candidate edges from Neo4j...
-                </div>
-              ) : currentItem ? (
-                <div className="space-y-6">
-                  
-                  {/* Meta-Graph Ontology Lineage */}
-                  {currentItem.meta_concept && (
-                    <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-800/40 flex items-center justify-between">
-                      <div className="flex items-center space-x-2 text-xs">
-                        <Layers className="w-4 h-4 text-indigo-400" />
-                        <span className="text-slate-400">Ontology Mapping:</span>
-                        <span className="font-mono text-indigo-300 font-semibold">{currentItem.relation}</span>
-                        <span className="text-slate-500">[{currentItem.meta_mapping || 'SUBCLASS_OF'}]</span>
-                        <span className="font-mono text-indigo-400 font-bold">{currentItem.meta_concept}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Triplet Visual Display */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center bg-slate-950 p-6 rounded-2xl border border-slate-800">
-                    
-                    {/* Subject Node */}
-                    <div className="p-4 rounded-xl bg-blue-950/50 border border-blue-800/60 text-center space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-blue-400 tracking-wider">
-                        {currentItem.subject.type || 'ENTITY'}
-                      </span>
-                      <h3 className="text-base font-bold text-blue-200 font-mono">
-                        {currentItem.subject.name}
-                      </h3>
-                    </div>
-
-                    {/* Relation Edge */}
-                    <div className="text-center space-y-2">
-                      <div className="inline-block px-3 py-1 rounded-lg bg-indigo-950 border border-indigo-800/80 text-indigo-300 font-mono font-bold text-xs uppercase tracking-wider">
-                        {currentItem.relation}
-                      </div>
-                      <div className="text-[11px] text-slate-400 font-mono">
-                        Confidence: {(currentItem.confidence * 100).toFixed(0)}%
-                      </div>
-                    </div>
-
-                    {/* Object Node */}
-                    <div className="p-4 rounded-xl bg-purple-950/50 border border-purple-800/60 text-center space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-purple-400 tracking-wider">
-                        {currentItem.object.type || 'ENTITY'}
-                      </span>
-                      <h3 className="text-base font-bold text-purple-200 font-mono">
-                        {currentItem.object.name}
-                      </h3>
-                    </div>
-
-                  </div>
-
-                </div>
-              ) : (
-                <div className="py-24 text-center text-slate-500 space-y-2">
-                  <p className="text-base font-medium">All pending candidate facts have been evaluated!</p>
-                  <p className="text-xs">No pending items remaining in queue.</p>
-                </div>
-              )}
-
-            </div>
-
-            {/* Action Buttons Footer */}
-            {currentItem && (
-              <div className="pt-6 border-t border-slate-800 grid grid-cols-3 gap-4 mt-8">
-                
-                <button
-                  onClick={handleReject}
-                  className="py-4 px-4 bg-rose-950/80 hover:bg-rose-900 border border-rose-800/80 text-rose-200 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-rose-900/30 group"
-                >
-                  <X className="w-5 h-5 text-rose-400 group-hover:scale-110 transition-transform" />
-                  <span>Reject (R)</span>
-                </button>
-
-                <button
-                  onClick={nextItem}
-                  className="py-4 px-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-all"
-                >
-                  <ChevronRight className="w-5 h-5 text-slate-400" />
-                  <span>Skip (N)</span>
-                </button>
-
-                <button
-                  onClick={handleApprove}
-                  className="py-4 px-4 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/20 group"
-                >
-                  <Check className="w-5 h-5 text-white group-hover:scale-110 transition-transform" />
-                  <span>Approve Fact (A)</span>
-                </button>
-
-              </div>
-            )}
-
-          </div>
-
+          <FactCard
+            currentItem={currentItem}
+            currentIndex={currentIndex}
+            totalItems={queue.length}
+            loading={loading}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            onNext={nextItem}
+            feedback={feedback}
+          />
         </div>
 
       </main>
+
+      {/* Knowledge Graph Analytics & Implications Modal */}
+      <AnalyticsModal
+        isOpen={isAnalyticsOpen}
+        onClose={() => setIsAnalyticsOpen(false)}
+        initialDocumentId={currentItem?.chunk_id || 'doc_101'}
+      />
     </div>
   );
 }

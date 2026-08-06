@@ -25,11 +25,16 @@ class ExtractionOutput(BaseModel):
     chunk_text: str
     triples: List[ExtractedTriple] = Field(default_factory=list)
 
+class TypoCorrection(BaseModel):
+    original_typo: str = Field(..., description="The exact typo string present in the extracted entity name (e.g. 'Carcinma').")
+    replacement: str = Field(..., description="The corrected word to replace the typo with (e.g. 'Carcinoma').")
+
 class CriticEvaluation(BaseModel):
     triple_index: int
     is_valid: bool = Field(..., description="Adversarial check: Is this fact explicitly supported by the text chunk?")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score between 0 and 1")
     critique_notes: str = Field("", description="Reasoning or notes on discrepancy")
+    typo_corrections: List[TypoCorrection] = Field(default_factory=list, description="Structured typo corrections for extracted entity names.")
 
 class SieveResult(BaseModel):
     chunk_id: str

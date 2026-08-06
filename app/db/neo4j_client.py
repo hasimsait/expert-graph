@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 from neo4j import GraphDatabase, Driver
+from neo4j.exceptions import ServiceUnavailable, SessionExpired
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -21,15 +22,23 @@ class Neo4jConnection:
                 cls._driver.verify_connectivity()
                 logger.info("Connected to Neo4j successfully at %s", settings.NEO4J_URI)
             except Exception as e:
-                logger.warning("Could not connect to Neo4j (%s). Graph operations running in mock store mode.", e)
+                logger.warning("Could not connect to Neo4j (%s). Ensure Neo4j service is running.", e)
                 cls._driver = None
         return cls._driver
 
     @classmethod
-    def close(cls):
+    def reset_driver(cls):
         if cls._driver is not None:
-            cls._driver.close()
-            cls._driver = None
+            try:
+                cls._driver.close()
+            except Exception:
+                pass
+        cls._driver = None
+        cls._tried_connect = False
+
+    @classmethod
+    def close(cls):
+        cls.reset_driver()
 
 def run_cypher(query: str, parameters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     driver = Neo4jConnection.get_driver()
@@ -40,8 +49,10 @@ def run_cypher(query: str, parameters: Optional[Dict[str, Any]] = None) -> List[
         with driver.session() as session:
             result = session.run(query, parameters or {})
             return [record.data() for record in result]
+    except (ServiceUnavailable, SessionExpired) as e:
+        logger.warning("Neo4j connection dropped (%s). Resetting connection driver.", e)
+        Neo4jConnection.reset_driver()
+        return []
     except Exception as e:
-        logger.warning("Neo4j execution exception (%s). Falling back to mock graph store.", e)
-        # Reset driver reference if connection died
-        Neo4jConnection._driver = None
+        logger.warning("Neo4j execution exception (%s).", e)
         return []

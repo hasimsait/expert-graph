@@ -1,8 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from app.module_a_sieve.extractor import extract_triples
-from app.module_a_sieve.critic import evaluate_triples
+from app.module_a_sieve import extractor, critic
 from app.module_a_sieve.ingester import ingest_sieve_output
 from app.module_c_mcp.retrieval import expand_meta_graph_concept, fetch_approved_facts
 
@@ -13,12 +12,12 @@ def test_sieve_pipeline():
     text = "Acme Corp owes $500,000 to Horizon Bank."
     
     # 1. Extractor
-    extraction = extract_triples(chunk_id, text)
+    extraction = extractor.extract_triples(chunk_id, text)
     assert len(extraction.triples) > 0
     assert extraction.triples[0].relation in ["OWES_DEBT", "DEBT_OBLIGATION"]
     
     # 2. Critic
-    evals = evaluate_triples(extraction)
+    evals = critic.evaluate_triples(extraction)
     assert len(evals) == len(extraction.triples)
     assert evals[0].is_valid is True
     

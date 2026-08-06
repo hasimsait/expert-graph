@@ -1,7 +1,7 @@
 import React from 'react';
-import { CheckCircle2, XCircle, Clock, Database, Sparkles } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Sparkles, Network } from 'lucide-react';
 
-export default function StatsHeader({ stats, onRefresh }) {
+export default function StatsHeader({ stats, onRefresh, onOpenAnalytics }) {
   return (
     <header className="bg-slate-900/90 border-b border-slate-800 backdrop-blur sticky top-0 z-40 px-6 py-4">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
@@ -22,8 +22,8 @@ export default function StatsHeader({ stats, onRefresh }) {
           </div>
         </div>
 
-        {/* Stats Counters */}
-        <div className="flex items-center space-x-4">
+        {/* Stats Counters & Analytics Action */}
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-amber-300 text-xs">
             <Clock className="w-3.5 h-3.5 text-amber-400" />
             <span className="font-semibold">{stats.pending || 0}</span>
@@ -43,11 +43,19 @@ export default function StatsHeader({ stats, onRefresh }) {
           </div>
 
           <button
+            onClick={onOpenAnalytics}
+            className="px-3 py-1.5 rounded-lg bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 transition-colors text-xs flex items-center gap-1.5 font-semibold shadow-sm"
+          >
+            <Network className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Graph Analytics & Implications</span>
+          </button>
+
+          <button
             onClick={onRefresh}
             className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors text-xs flex items-center gap-1"
+            title="Refresh queue"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Refresh</span>
           </button>
         </div>
 

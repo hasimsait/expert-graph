@@ -1,0 +1,50 @@
+{
+  "concepts": [
+    {
+      "name": "MEDICAL_CONDITION",
+      "description": "Pathology diagnosis, disease, or medical disorder",
+      "parent": "RELATIONSHIP",
+      "rel_type": "SUBCLASS_OF"
+    },
+    {
+      "name": "BIOLOGICAL_PROCESS",
+      "description": "Gene mutation, biomarker, or molecular mechanism",
+      "parent": "RELATIONSHIP",
+      "rel_type": "SUBCLASS_OF"
+    },
+    {
+      "name": "PATHOLOGY_SPECIMEN",
+      "description": "Tissue biopsy, resection, or fluid aspirate sample",
+      "parent": "RELATIONSHIP",
+      "rel_type": "SUBCLASS_OF"
+    },
+    {
+      "name": "FOUND_IN_SPECIMEN",
+      "description": "Pathology diagnosis identified in tissue specimen",
+      "parent": "MEDICAL_CONDITION",
+      "rel_type": "SUBCLASS_OF"
+    },
+    {
+      "name": "ASSOCIATED_GENE",
+      "description": "Biomarker or genetic mutation associated with pathology diagnosis",
+      "parent": "BIOLOGICAL_PROCESS",
+      "rel_type": "SUBCLASS_OF"
+    },
+    {
+      "name": "TREATS_CONDITION",
+      "description": "Therapeutic drug or intervention targeting condition",
+      "parent": "MEDICAL_CONDITION",
+      "rel_type": "SUBCLASS_OF"
+    }
+  ],
+  "synonyms": [
+    {
+      "name": "DIAGNOSED_WITH",
+      "parent": "FOUND_IN_SPECIMEN"
+    },
+    {
+      "name": "EXPRESSES_BIOMARKER",
+      "parent": "ASSOCIATED_GENE"
+    }
+  ]
+}
