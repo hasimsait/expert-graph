@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import pytest
 from app.db.repository import set_graph_repository, Neo4jGraphRepository
+from app.services.tfidf_retrieval import TFIDFRetriever
 from tests.mocks.mock_graph import InMemoryGraphRepository
 from tests.mocks.mock_sieve import test_mock_extract, test_mock_evaluate
 
@@ -14,6 +15,7 @@ def setup_test_repository(monkeypatch):
     Autouse fixture that installs InMemoryGraphRepository and patches Sieve LLM calls
     for all pytest test executions. Automatically resets state after each test.
     """
+    TFIDFRetriever.reset_cache()
     test_repo = InMemoryGraphRepository()
     set_graph_repository(test_repo)
     
@@ -25,4 +27,5 @@ def setup_test_repository(monkeypatch):
     
     yield test_repo
     asyncio.run(test_repo.reset_graph())
+    TFIDFRetriever.reset_cache()
     set_graph_repository(Neo4jGraphRepository())

@@ -22,6 +22,8 @@ async def lifespan(fastapi_app: FastAPI):
     logger.info("Starting ExpertGraph server — initializing Dual Graph database schema...")
     try:
         await init_db_schema()
+        from app.services.tfidf_retrieval import TFIDFRetriever
+        await TFIDFRetriever.warmup_from_db()
     except Exception as e:
         logger.warning("Database initialization warning: %s", e)
     

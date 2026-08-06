@@ -89,9 +89,30 @@ class Neo4jGraphRepository(GraphRepository):
         MATCH (s:Entity)-[r]->(o:Entity)
         WHERE r.edge_id = $edge_id OR (r.status = "pending" AND r.chunk_id = $edge_id)
         SET r.status = $status, r.approved_by = $user_id, r.timestamp = timestamp()
-        RETURN r.edge_id AS edge_id
+        WITH s, r, o
+        OPTIONAL MATCH (ch:Chunk {id: r.chunk_id})
+        RETURN 
+            r.edge_id AS edge_id,
+            s.name AS subject,
+            s.type AS subject_type,
+            type(r) AS relation,
+            o.name AS object,
+            o.type AS object_type,
+            r.confidence AS confidence,
+            r.approved_by AS approved_by,
+            r.timestamp AS timestamp,
+            r.chunk_id AS chunk_id,
+            ch.text AS chunk_text
         """
         results = await run_cypher(cypher, {"edge_id": edge_id, "status": status, "user_id": user_id})
+        if results:
+            from app.services.tfidf_retrieval import TFIDFRetriever
+            if status == "approved":
+                for rec in results:
+                    TFIDFRetriever.add_fact_delta(rec)
+            elif status in ["rejected", "deleted"]:
+                for rec in results:
+                    TFIDFRetriever.remove_fact_delta(rec.get("edge_id") or edge_id)
         return len(results) > 0
 
     async def expand_meta_graph_concept(self, concept_name: str) -> List[str]:
@@ -306,6 +327,8 @@ class Neo4jGraphRepository(GraphRepository):
     async def reset_graph(self) -> None:
         cypher = "MATCH (n) DETACH DELETE n"
         await run_cypher(cypher)
+        from app.services.tfidf_retrieval import TFIDFRetriever
+        TFIDFRetriever.reset_cache()
 
 
 # Repository Factory / Dependency Injector

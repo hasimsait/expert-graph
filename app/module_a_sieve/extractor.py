@@ -9,10 +9,30 @@ logger = logging.getLogger(__name__)
 
 EXTRACTION_SYSTEM_PROMPT = """
 You are an expert Information Extraction Sieve. Your task is to pull factual triples (Subject, Relation, Object) from raw text chunks.
-Follow these strict rules:
-1. Normalize entity names and uppercase relation names (e.g., OWES_DEBT, LAWSUIT_AGAINST, TRANSFERS_FUNDS, SUBSIDIARY_OF).
-2. If you introduce a relation name that is NOT standard, you MUST output a concept_mapping tying it to an existing Meta-Graph concept via SUBCLASS_OF or SYNONYM_OF.
+
+CRITICAL JSON STRUCTURAL REQUIREMENT:
+You MUST format each triple with top-level keys "subject", "relation", and "object" as sibling fields.
+Do NOT nest "relation" or "object" inside the "subject" object. You MUST close the "subject" object brace } before writing "relation".
+
+EXACT JSON OUTPUT STRUCTURE EXAMPLE:
+{
+  "chunk_id": "chk_101",
+  "chunk_text": "Acme Corp owes $500,000 to Horizon Bank.",
+  "triples": [
+    {
+      "subject": {"name": "Entity A", "type": "CONCEPT"},
+      "relation": "ASSOCIATED_WITH",
+      "object": {"name": "Entity B", "type": "CONCEPT"},
+      "concept_mapping": null
+    }
+  ]
+}
+
+STRICT EXTRACTION RULES:
+1. Normalize entity names and uppercase relation names (e.g., OWES_DEBT, LAWSUIT_AGAINST, TRANSFERS_FUNDS, SUBSIDIARY_OF, ASSOCIATED_GENE, FOUND_IN_SPECIMEN).
+2. If you introduce a relation name that is NOT standard, you MUST output a concept_mapping object with new_relation, existing_concept, and mapping_type ("SUBCLASS_OF" or "SYNONYM_OF"). Otherwise, set concept_mapping to null.
 3. Never hallucinate facts that are not explicitly stated in the chunk text.
+4. ENSURE ALL BRACKETS ARE PROPERLY CLOSED: "subject": {"name": "...", "type": "..."}, "relation": "...", "object": {"name": "...", "type": "..."}.
 """
 
 async def extract_triples(chunk_id: str, chunk_text: str) -> ExtractionOutput:

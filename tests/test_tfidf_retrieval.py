@@ -1,5 +1,6 @@
 import pytest
 from app.services.tfidf_retrieval import TFIDFRetriever
+from tests.mocks.mock_graph import InMemoryGraphRepository
 
 def test_tfidf_rank_facts_breast_cancer():
     facts = [
@@ -64,3 +65,76 @@ def test_tfidf_rank_facts_financial():
 
     assert len(ranked) == 1
     assert ranked[0]["edge_id"] == "edge_fin_01"
+
+@pytest.mark.anyio
+async def test_unmocked_tfidf_retrieval_with_mock_graph_store():
+    """
+    Integration test: Un-mocked real TF-IDF retrieval running against an 
+    in-memory graph database loaded with pathology, legal, and financial facts.
+    """
+    repo = InMemoryGraphRepository()
+    await repo.reset_graph()
+    TFIDFRetriever.reset_cache()
+
+    # 1. Add candidate edges directly into mock graph
+    repo.add_edge({
+        "edge_id": "edge_path_001",
+        "subject": {"name": "Invasive Ductal Carcinoma", "type": "DISEASE_DIAGNOSIS"},
+        "relation": "ASSOCIATED_GENE",
+        "object": {"name": "HER2 Receptor", "type": "GENE_BIOMARKER"},
+        "confidence": 0.98,
+        "status": "approved",
+        "approved_by": "Dr_Smith",
+        "chunk_id": "chk_path_01",
+        "chunk_text": "Biopsy report shows invasive ductal carcinoma with strong HER2 receptor overexpression."
+    })
+    repo.add_edge({
+        "edge_id": "edge_path_002",
+        "subject": {"name": "Papillary Thyroid Carcinoma", "type": "DISEASE_DIAGNOSIS"},
+        "relation": "ASSOCIATED_GENE",
+        "object": {"name": "BRAF V600E Mutation", "type": "GENE_BIOMARKER"},
+        "confidence": 0.95,
+        "status": "approved",
+        "approved_by": "Dr_Smith",
+        "chunk_id": "chk_path_02",
+        "chunk_text": "Thyroid FNA shows papillary carcinoma positive for BRAF V600E point mutation."
+    })
+    repo.add_edge({
+        "edge_id": "edge_fin_001",
+        "subject": {"name": "Acme Capital", "type": "ORGANIZATION"},
+        "relation": "OWES_DEBT",
+        "object": {"name": "Global Credit Corp", "type": "ORGANIZATION"},
+        "confidence": 0.99,
+        "status": "approved",
+        "approved_by": "thesis_annotator_1",
+        "chunk_id": "chk_fin_01",
+        "chunk_text": "Acme Capital owes $12 million in senior debt to Global Credit Corp."
+    })
+    repo.add_edge({
+        "edge_id": "edge_pending_001",
+        "subject": {"name": "Unapproved Entity", "type": "ORGANIZATION"},
+        "relation": "ASSOCIATED_WITH",
+        "object": {"name": "HER2 Gene", "type": "GENE"},
+        "confidence": 0.50,
+        "status": "pending",
+        "chunk_id": "chk_pend_01",
+        "chunk_text": "Unverified draft text mentioning HER2."
+    })
+
+    # 2. Query for HER2 gene biomarker
+    her2_facts = await repo.get_approved_facts("HER2 gene biomarker in breast carcinoma")
+    assert len(her2_facts) == 1
+    assert her2_facts[0]["edge_id"] == "edge_path_001"
+    assert her2_facts[0]["subject"] == "Invasive Ductal Carcinoma"
+
+    # 3. Query for financial debt
+    debt_facts = await repo.get_approved_facts("Acme Capital debt liabilities to Global Credit")
+    assert len(debt_facts) == 1
+    assert debt_facts[0]["edge_id"] == "edge_fin_001"
+    assert debt_facts[0]["subject"] == "Acme Capital"
+
+    # 4. Approve pending edge and verify incremental delta update
+    await repo.update_edge_status("edge_pending_001", "approved", "Dr_Smith")
+    updated_her2_facts = await repo.get_approved_facts("HER2")
+    assert len(updated_her2_facts) == 2
+    assert {f["edge_id"] for f in updated_her2_facts} == {"edge_path_001", "edge_pending_001"}

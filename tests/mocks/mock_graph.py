@@ -159,6 +159,9 @@ class InMemoryGraphRepository(GraphRepository):
                 edge["approved_by"] = user_id
                 edge["timestamp"] = now
                 updated = True
+        if updated:
+            from app.services.tfidf_retrieval import TFIDFRetriever
+            TFIDFRetriever.invalidate_cache()
         return updated
 
     async def get_approved_facts(self, query: str = "ALL") -> List[Dict[str, Any]]:
@@ -288,6 +291,8 @@ class InMemoryGraphRepository(GraphRepository):
         self.canonical_concepts = {}
         self.downstream_implications = []
         self.concept_links = []
+        from app.services.tfidf_retrieval import TFIDFRetriever
+        TFIDFRetriever.invalidate_cache()
 
 # Global Test Mock Instance for pytest usage
 mock_graph_store = InMemoryGraphRepository()
