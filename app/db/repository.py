@@ -1,4 +1,5 @@
 import logging
+import time
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from app.db.neo4j_client import run_cypher
@@ -48,9 +49,35 @@ class GraphRepository(ABC):
     async def reset_graph(self) -> None:
         pass
 
+    @abstractmethod
+    async def store_er_mapping(self, chunk_id: str, raw_string: str, res: Dict[str, Any]) -> None:
+        pass
+
 
 class Neo4jGraphRepository(GraphRepository):
     """Production implementation of GraphRepository targeting Neo4j database asynchronously."""
+
+    async def store_er_mapping(self, chunk_id: str, raw_string: str, res: Dict[str, Any]) -> None:
+        map_cypher = """
+        MATCH (ch:Chunk {id: $chunk_id})
+        MERGE (r:RawEntity {name: $raw_string})
+        MERGE (c:CanonicalConcept {id: $canonical_id})
+        ON CREATE SET c.name = $canonical_name
+        MERGE (ch)-[:MENTIONS]->(r)
+        MERGE (r)-[m:MAPPED_TO]->(c)
+        ON CREATE SET m.confidence = $confidence
+        ON MATCH SET m.confidence = $confidence
+        """
+        try:
+            await run_cypher(map_cypher, {
+                "chunk_id": chunk_id,
+                "raw_string": raw_string,
+                "canonical_id": res["canonical_id"],
+                "canonical_name": res["canonical_name"],
+                "confidence": res["confidence"]
+            })
+        except Exception as e:
+            logger.warning("Failed to store ER mapping for '%s': %s", raw_string, e)
 
     async def get_pending_queue(self, limit: int = 20) -> List[Dict[str, Any]]:
         cypher = """
@@ -92,7 +119,7 @@ class Neo4jGraphRepository(GraphRepository):
         cypher = """
         MATCH (s:Entity)-[r]->(o:Entity)
         WHERE r.edge_id = $edge_id OR (r.status = "pending" AND r.chunk_id = $edge_id)
-        SET r.status = $status, r.approved_by = $user_id, r.timestamp = timestamp()
+        SET r.status = $status, r.approved_by = $user_id, r.timestamp = $timestamp
         WITH s, r, o
         OPTIONAL MATCH (ch:Chunk {id: r.chunk_id})
         RETURN 
@@ -108,7 +135,7 @@ class Neo4jGraphRepository(GraphRepository):
             r.chunk_id AS chunk_id,
             ch.text AS chunk_text
         """
-        results = await run_cypher(cypher, {"edge_id": edge_id, "status": status, "user_id": user_id})
+        results = await run_cypher(cypher, {"edge_id": edge_id, "status": status, "user_id": user_id, "timestamp": int(time.time())})
         if results:
             from app.services.tfidf_retrieval import TFIDFRetriever
             from app.services.entity_resolution import get_entity_resolver
@@ -191,8 +218,10 @@ class Neo4jGraphRepository(GraphRepository):
 
             cypher_search = f"""
             MATCH (s:Entity)-[r]->(o:Entity)
+            WHERE r.status = "approved"
             OPTIONAL MATCH (ch:Chunk {{id: r.chunk_id}})
-            WHERE r.status = "approved" AND ({" OR ".join(token_conditions)})
+            WITH s, r, o, ch
+            WHERE ({" OR ".join(token_conditions)})
             RETURN 
                 r.edge_id AS edge_id,
                 s.name AS subject_name,

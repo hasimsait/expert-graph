@@ -73,22 +73,21 @@ class TFIDFRetriever:
         if not to_add:
             return
 
-        # Case 1: First time indexing - fit vectorizer on initial corpus batch
-        if cls._vectorizer is None or cls._doc_matrix is None or len(cls._indexed_facts) == 0:
-            cls._vectorizer = TfidfVectorizer(ngram_range=(1, 2), stop_words='english', lowercase=True)
-            cls._doc_matrix = cls._vectorizer.fit_transform(to_add_corpus)
-            cls._indexed_facts = list(to_add)
-            logger.info("Initialized TF-IDF index with %d facts.", len(to_add))
-            return
-
-        # Case 2: Incremental delta append using scipy.sparse.vstack
+        # Scikit-learn TfidfVectorizer cannot incrementally learn new vocabulary words.
+        # If we use vstack with transform(), any words in new facts that weren't in the initial 
+        # training corpus are completely ignored, making them unsearchable.
+        # Since fitting on thousands of short facts is virtually instantaneous, we simply 
+        # re-fit the entire index.
+        cls._indexed_facts.extend(to_add)
+        
+        all_corpus = [cls._format_fact_doc(f) for f in cls._indexed_facts]
+        
         try:
-            delta_matrix = cls._vectorizer.transform(to_add_corpus)
-            cls._doc_matrix = vstack([cls._doc_matrix, delta_matrix])
-            cls._indexed_facts.extend(to_add)
-            logger.info("Delta-appended %d new fact(s) to TF-IDF matrix. Total index size: %d.", len(to_add), len(cls._indexed_facts))
+            cls._vectorizer = TfidfVectorizer(ngram_range=(1, 2), stop_words='english', lowercase=True)
+            cls._doc_matrix = cls._vectorizer.fit_transform(all_corpus)
+            logger.info("Re-fitted TF-IDF matrix with %d new fact(s). Total index size: %d.", len(to_add), len(cls._indexed_facts))
         except Exception as e:
-            logger.warning("Error appending delta to TF-IDF index: %s", e)
+            logger.warning("Error re-fitting TF-IDF index: %s", e)
 
     @classmethod
     def remove_fact_delta(cls, edge_id: str) -> None:

@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 # 1. Define MCP Tool Schema for Llama / OpenAI completion
 TOOLS = [
+    #hinting the default test case to force tiny models to call the tool
     {
         "type": "function",
         "function": {
@@ -63,7 +64,7 @@ def ask_llama_with_mcp(user_question: str):
             tools=TOOLS,
             tool_choice="auto",
             max_tokens=settings.MAX_TOKENS,
-            stop=settings.STOP_TOKENS
+            stop=settings.get_stop_tokens()
         )
         
         message = response.choices[0].message
@@ -121,7 +122,7 @@ def ask_llama_with_mcp(user_question: str):
                 model=model,
                 messages=messages,
                 max_tokens=settings.MAX_TOKENS,
-                stop=settings.STOP_TOKENS
+                stop=settings.get_stop_tokens()
             )
             final_answer = final_response.choices[0].message.content
             print("=======================================================")

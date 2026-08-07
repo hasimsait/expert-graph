@@ -45,7 +45,6 @@ async def run_pathology_flow(server_url:str = "http://localhost:8000"):
         reset_res = await client.post("/api/reset")
         assert reset_res.status_code == 200
         print("  ✓ Database & Queue reset cleanly.\n")
-
         # Step 2: Load Medical Ontology Domain Baseline
         print("Step 2: Loading Medical Ontology Domain Baseline into Meta-Graph...")
         sample_json_path = os.path.join(os.path.dirname(__file__), "sample_medical_ontology.json")
@@ -110,7 +109,7 @@ async def run_pathology_flow(server_url:str = "http://localhost:8000"):
     print("To view these approved pathology facts in the UI:")
     print("  1. Run Server: PYTHONPATH=. uvicorn app.main:app --port 8000")
     print("  2. Annotator Dashboard: http://localhost:8000/")
-    print("  3. RAG Facts Widget:    http://localhost:8000/ui/facts-widget?concept=MEDICAL_CONDITION")
+    print("  3. RAG Facts Widget:    http://localhost:8000/ui/facts-widget")
     print("========================================================================\n")
 
 if __name__ == "__main__":

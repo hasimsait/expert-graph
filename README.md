@@ -165,7 +165,16 @@ PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## 🧪 Testing
 
-Run the automated test suite using `pytest`:
+ExpertGraph supports dual-mode testing using a repository pattern to isolate unit tests from production data.
+
+### Unit Tests (In-Memory)
+By default, all tests use `InMemoryGraphRepository`. This is completely safe and isolated from your Neo4j database:
 ```bash
 PYTHONPATH=. ./venv/bin/pytest
+```
+
+### Integration Tests (Live Neo4j)
+To run end-to-end integration tests that hit the actual Neo4j database, we use isolated `:TestNode` namespaces that automatically clean up after themselves. Run them using the `integration` marker:
+```bash
+PYTHONPATH=. ./venv/bin/pytest -m integration
 ```

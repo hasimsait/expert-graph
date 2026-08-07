@@ -3,52 +3,38 @@ import re
 import difflib
 import time
 from typing import List
-import instructor
+from pydantic import BaseModel
 from app.config import settings
 from app.module_a_sieve.schemas import ExtractionOutput, CriticEvaluation, ExtractedTriple, TypoCorrection
+from app.services.llm_service import get_llm_service
+from app.services.prompt_manager import get_prompt_manager
 
 logger = logging.getLogger(__name__)
 
-CRITIC_SYSTEM_PROMPT = """
-You are an Adversarial Critic LLM. Your task is to rigorously cross-reference proposed factual triples against the raw text chunk.
-
-EXACT JSON OUTPUT STRUCTURE EXAMPLE:
-{
-  "evaluations": [
-    {
-      "triple_index": 0,
-      "is_valid": true,
-      "confidence": 0.95,
-      "typo_corrections": [
-        {
-          "original_typo": "forgor",
-          "replacement": "forgot"
-        }
-      ]
-    }
-  ]
-}
-
-STRICT EVALUATION RULES:
-1. Is the subject, relation, and object strictly supported by the text chunk?
-2. Mark is_valid = true if supported, or is_valid = false if hallucinated or distorted.
-3. Provide a confidence score between 0.0 and 1.0.
-4. If an entity name contains a minor spelling typo (e.g., 'forgor' instead of 'forgot'), do NOT use freetext. Instead, provide a structured typo_corrections list specifying 'original_typo' and 'replacement'.
-"""
+def _apply_typo_to_string(text: str, typo: str, rep: str) -> str:
+    pattern = r'\b' + re.escape(typo) + r'\b'
+    if re.search(pattern, text, flags=re.IGNORECASE):
+        new_text = re.sub(pattern, rep, text, flags=re.IGNORECASE)
+        logger.info("Accepted Critic typo edit: '%s' -> '%s' (Result: '%s')", typo, rep, new_text)
+        return new_text
+        
+    words = text.split()
+    new_words = []
+    for w in words:
+        w_sim = difflib.SequenceMatcher(None, typo.lower(), w.lower()).ratio()
+        if w_sim >= 0.8:
+            new_words.append(rep)
+            logger.info("Accepted Critic fuzzy typo edit: '%s' -> '%s'", w, rep)
+        else:
+            new_words.append(w)
+    return " ".join(new_words)
 
 def validate_and_apply_typo_corrections(
     triple: ExtractedTriple,
     corrections: List[TypoCorrection],
     chunk_text: str
 ) -> ExtractedTriple:
-    """
-    Validates Critic typo correction suggestions and applies them to extracted entity names.
-    Rules:
-    1. Critic specifies 'original_typo' and 'replacement'.
-    2. Check if 'original_typo' appears in extracted entity name or text (or fuzzy matches >= 0.8).
-    3. Ensure 'replacement' is a valid typo fix (fuzzy similarity >= 0.65 or replacement appears in chunk_text).
-    4. If validated, replace original_typo with replacement in triple's subject and object names.
-    """
+    """Validates Critic typo correction suggestions and applies them to extracted entity names."""
     if not corrections:
         return triple
 
@@ -64,63 +50,29 @@ def validate_and_apply_typo_corrections(
             logger.info("Rejected Critic typo fix '%s' -> '%s' (similarity %.2f too low and replacement not in text)", typo, rep, sim)
             continue
 
-        pattern = r'\b' + re.escape(typo) + r'\b'
-
-        # Subject Replacement
-        if re.search(pattern, triple.subject.name, flags=re.IGNORECASE):
-            triple.subject.name = re.sub(pattern, rep, triple.subject.name, flags=re.IGNORECASE)
-            logger.info("Accepted Critic typo edit in subject: '%s' -> '%s' (Result: '%s')", typo, rep, triple.subject.name)
-        else:
-            words = triple.subject.name.split()
-            new_words = []
-            for w in words:
-                w_sim = difflib.SequenceMatcher(None, typo.lower(), w.lower()).ratio()
-                if w_sim >= 0.8:
-                    new_words.append(rep)
-                    logger.info("Accepted Critic fuzzy typo edit in subject: '%s' -> '%s'", w, rep)
-                else:
-                    new_words.append(w)
-            triple.subject.name = " ".join(new_words)
-
-        # Object Replacement
-        if re.search(pattern, triple.object.name, flags=re.IGNORECASE):
-            triple.object.name = re.sub(pattern, rep, triple.object.name, flags=re.IGNORECASE)
-            logger.info("Accepted Critic typo edit in object: '%s' -> '%s' (Result: '%s')", typo, rep, triple.object.name)
-        else:
-            words = triple.object.name.split()
-            new_words = []
-            for w in words:
-                w_sim = difflib.SequenceMatcher(None, typo.lower(), w.lower()).ratio()
-                if w_sim >= 0.8:
-                    new_words.append(rep)
-                    logger.info("Accepted Critic fuzzy typo edit in object: '%s' -> '%s'", w, rep)
-                else:
-                    new_words.append(w)
-            triple.object.name = " ".join(new_words)
+        triple.subject.name = _apply_typo_to_string(triple.subject.name, typo, rep)
+        triple.object.name = _apply_typo_to_string(triple.object.name, typo, rep)
 
     return triple
 
+class BatchCriticEvaluation(BaseModel):
+    evaluations: List[CriticEvaluation]
+
 async def evaluate_triples(extraction: ExtractionOutput) -> List[CriticEvaluation]:
-    """Evaluate triples using Adversarial Critic LLM asynchronously (OpenAI, Ollama, Llama.cpp, vLLM, Gemma)."""
+    """Evaluate triples using Adversarial Critic LLM asynchronously."""
     start_time = time.time()
-    provider = settings.LLM_PROVIDER.lower().replace("-", "_")
+    
+    llm_service = get_llm_service()
+    prompt_manager = get_prompt_manager()
+    
+    provider = llm_service.provider
+    system_prompt = prompt_manager.get_critic_prompt()
     
     try:
-        from openai import AsyncOpenAI
-        base_url = settings.LLM_BASE_URL if provider != "openai" else None
-        if base_url:
-            if not (base_url.startswith("http://") or base_url.startswith("https://")):
-                base_url = f"http://{base_url}"
-            if not base_url.endswith("/v1") and not base_url.endswith("/v1/"):
-                base_url = f"{base_url.rstrip('/')}/v1"
-
-        api_key = settings.OPENAI_API_KEY if settings.OPENAI_API_KEY else "local"
-        
         logger.info("--> [Critic Start] chunk_id: '%s' | Model: '%s' | Evaluating %d triples", extraction.chunk_id, settings.LLM_MODEL, len(extraction.triples))
-        logger.info("--> [Critic Prompt] System: %s", CRITIC_SYSTEM_PROMPT.strip())
+        logger.info("--> [Critic Prompt] System: %s", system_prompt.strip())
         
-        mode = instructor.Mode.MD_JSON if provider != "openai" else instructor.Mode.TOOLS
-        client = instructor.from_openai(AsyncOpenAI(base_url=base_url, api_key=api_key), mode=mode)
+        client = llm_service.get_instructor_client()
         
         prompt_content = f"Chunk Text:\n{extraction.chunk_text}\n\nProposed Triples:\n"
         for idx, t in enumerate(extraction.triples):
@@ -128,19 +80,15 @@ async def evaluate_triples(extraction: ExtractionOutput) -> List[CriticEvaluatio
             
         logger.info("--> [Critic Input Triples]\n%s", prompt_content.strip())
 
-        class BatchCriticEvaluation(instructor.OpenAISchema):
-            evaluations: List[CriticEvaluation]
-
-        res = await client.chat.completions.create(
-            model=settings.LLM_MODEL,
+        llm_kwargs = llm_service.get_llm_kwargs(
             response_model=BatchCriticEvaluation,
-            max_tokens=settings.MAX_TOKENS,
-            stop=settings.STOP_TOKENS,
             messages=[
-                {"role": "system", "content": CRITIC_SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt_content}
             ]
         )
+
+        res = await client.chat.completions.create(**llm_kwargs)
         elapsed = time.time() - start_time
         valid_cnt = sum(1 for ev in res.evaluations if ev.is_valid)
         logger.info("<-- [Critic Done] chunk_id: '%s' | Validated %d/%d triples in %.2fs", extraction.chunk_id, valid_cnt, len(res.evaluations), elapsed)

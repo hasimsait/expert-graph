@@ -309,5 +309,18 @@ class InMemoryGraphRepository(GraphRepository):
         from app.services.tfidf_retrieval import TFIDFRetriever
         TFIDFRetriever.invalidate_cache()
 
+    async def store_er_mapping(self, chunk_id: str, raw_string: str, res: Dict[str, Any]) -> None:
+        self.raw_entities.append({
+            "name": raw_string,
+            "doc_id": chunk_id,
+            "mapped_to": res["canonical_id"],
+            "confidence": res["confidence"]
+        })
+        if res["canonical_id"] not in self.canonical_concepts:
+            self.canonical_concepts[res["canonical_id"]] = {
+                "id": res["canonical_id"],
+                "name": res["canonical_name"]
+            }
+
 # Global Test Mock Instance for pytest usage
 mock_graph_store = InMemoryGraphRepository()

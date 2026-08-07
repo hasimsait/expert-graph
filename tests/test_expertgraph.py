@@ -5,8 +5,9 @@ from app.module_a_sieve import extractor, critic
 from app.module_a_sieve.ingester import ingest_sieve_output
 from app.module_c_mcp.retrieval import expand_meta_graph_concept, fetch_approved_facts
 
-client = TestClient(app)
-
+# These tests require a running Neo4j instance — they exercise the full
+# ingestion pipeline including direct run_cypher writes to the database.
+@pytest.mark.integration
 @pytest.mark.anyio
 async def test_sieve_pipeline():
     chunk_id = "test_chk_101"
@@ -27,32 +28,34 @@ async def test_sieve_pipeline():
     assert len(sieve_res.processed_triples) > 0
     assert sieve_res.processed_triples[0]["status"] == "pending"
 
+@pytest.mark.integration
 def test_annotator_api():
-    # Ingest text first via API
-    ingest_res = client.post("/api/ingest", json={
-        "text": "Apex Corp filed a lawsuit against Cyber Dynamics."
-    })
-    assert ingest_res.status_code == 200
-    assert ingest_res.json()["status"] == "success"
+    with TestClient(app) as client:
+        # Ingest text first via API
+        ingest_res = client.post("/api/ingest", json={
+            "text": "Apex Corp filed a lawsuit against Cyber Dynamics."
+        })
+        assert ingest_res.status_code == 200
+        assert ingest_res.json()["status"] == "success"
 
-    # Get Pending Queue
-    queue_res = client.get("/api/queue")
-    assert queue_res.status_code == 200
-    queue = queue_res.json()["queue"]
-    assert len(queue) > 0
+        # Get Pending Queue
+        queue_res = client.get("/api/queue")
+        assert queue_res.status_code == 200
+        queue = queue_res.json()["queue"]
+        assert len(queue) > 0
 
-    edge_to_test = queue[0]["edge_id"]
+        edge_to_test = queue[0]["edge_id"]
 
-    # Approve Edge
-    app_res = client.post(f"/api/approve/{edge_to_test}", json={"user_id": "test_annotator"})
-    assert app_res.status_code == 200
-    assert app_res.json()["status"] == "approved"
+        # Approve Edge
+        app_res = client.post(f"/api/approve/{edge_to_test}", json={"user_id": "test_annotator"})
+        assert app_res.status_code == 200
+        assert app_res.json()["status"] == "approved"
 
-    # Verify Stats
-    stats_res = client.get("/api/stats")
-    assert stats_res.status_code == 200
-    stats = stats_res.json()
-    assert stats["approved"] >= 1
+        # Verify Stats
+        stats_res = client.get("/api/stats")
+        assert stats_res.status_code == 200
+        stats = stats_res.json()
+        assert stats["approved"] >= 1
 
 @pytest.mark.anyio
 async def test_meta_expansion_and_retrieval():
@@ -64,30 +67,36 @@ async def test_meta_expansion_and_retrieval():
     assert isinstance(facts, list)
 
 def test_mcp_ui_widget_endpoint():
-    response = client.get("/ui/facts-widget?concept=OWES_DEBT")
-    assert response.status_code == 200
-    assert "ExpertGraph Ground Truth Facts" in response.text
-    assert "OWES_DEBT" in response.text
+    with TestClient(app) as client:
+        response = client.get("/ui/facts-widget?concept=OWES_DEBT")
+        assert response.status_code == 200
+        assert "ExpertGraph Ground Truth Facts" in response.text
+        assert "OWES_DEBT" in response.text
 
 def test_root_dashboard():
-    response = client.get("/")
-    assert response.status_code == 200
+    with TestClient(app) as client:
+        response = client.get("/")
+        assert response.status_code == 200
 
 def test_health_and_stateless_mcp():
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-    assert response.json()["mcp_endpoint"] == "/mcp"
+    with TestClient(app) as client:
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+        assert response.json()["mcp_endpoint"] == "/mcp"
 
+@pytest.mark.integration
 def test_pathology_ingestion_and_queue():
-    ingest_res = client.post("/api/ingest", json={
-        "chunk_id": "PATH_TEST_99",
-        "text": "SPECIMEN: Breast biopsy. DIAGNOSIS: Invasive Ductal Carcinoma overexpressing HER2 receptor."
-    })
-    assert ingest_res.status_code == 200
-    assert ingest_res.json()["triples_ingested"] >= 1
+    with TestClient(app) as client:
+        ingest_res = client.post("/api/ingest", json={
+            "chunk_id": "PATH_TEST_99",
+            "text": "SPECIMEN: Breast biopsy. DIAGNOSIS: Invasive Ductal Carcinoma overexpressing HER2 receptor."
+        })
+        assert ingest_res.status_code == 200
+        assert ingest_res.json()["triples_ingested"] >= 1
 
-    queue_res = client.get("/api/queue")
-    assert queue_res.status_code == 200
-    queue = queue_res.json()["queue"]
-    assert any(q["chunk_id"] == "PATH_TEST_99" for q in queue)
+        queue_res = client.get("/api/queue")
+        assert queue_res.status_code == 200
+        queue = queue_res.json()["queue"]
+        assert any(q["chunk_id"] == "PATH_TEST_99" for q in queue)
+

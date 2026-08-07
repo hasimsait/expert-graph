@@ -8,12 +8,11 @@ logger = logging.getLogger(__name__)
 
 class Neo4jConnection:
     _driver: Optional[AsyncDriver] = None
-    _tried_connect: bool = False
 
     @classmethod
-    async def get_driver(cls) -> Optional[AsyncDriver]:
-        if cls._driver is None and not cls._tried_connect:
-            cls._tried_connect = True
+    async def get_driver(cls) -> AsyncDriver:
+        """Get or create the Neo4j async driver. Retries connection each time if not connected."""
+        if cls._driver is None:
             try:
                 cls._driver = AsyncGraphDatabase.driver(
                     settings.NEO4J_URI,
@@ -22,8 +21,11 @@ class Neo4jConnection:
                 await cls._driver.verify_connectivity()
                 logger.info("Connected to Neo4j AsyncDriver successfully at %s", settings.NEO4J_URI)
             except Exception as e:
-                logger.warning("Could not connect to Neo4j AsyncDriver (%s). Ensure Neo4j service is running.", e)
                 cls._driver = None
+                raise ConnectionError(
+                    f"Could not connect to Neo4j at {settings.NEO4J_URI}: {e}. "
+                    "Ensure Neo4j service is running."
+                ) from e
         return cls._driver
 
     @classmethod
@@ -34,26 +36,33 @@ class Neo4jConnection:
             except Exception:
                 pass
         cls._driver = None
-        cls._tried_connect = False
 
     @classmethod
     async def close(cls):
         await cls.reset_driver()
 
 async def run_cypher(query: str, parameters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """Execute a Cypher query. Retries once on transient connection failures. Raises on persistent errors."""
     driver = await Neo4jConnection.get_driver()
-    if driver is None:
-        return []
-    
+
     try:
         async with driver.session() as session:
             result = await session.run(query, parameters or {})
             records = await result.data()
             return records
     except (ServiceUnavailable, SessionExpired) as e:
-        logger.warning("Neo4j async connection dropped (%s). Resetting connection driver.", e)
+        logger.warning("Neo4j connection dropped (%s). Resetting driver and retrying once...", e)
         await Neo4jConnection.reset_driver()
-        return []
+        # Retry once after reconnection
+        try:
+            driver = await Neo4jConnection.get_driver()
+            async with driver.session() as session:
+                result = await session.run(query, parameters or {})
+                records = await result.data()
+                return records
+        except Exception as retry_err:
+            logger.error("Neo4j retry also failed: %s", retry_err)
+            raise
     except Exception as e:
-        logger.warning("Neo4j async execution exception (%s).", e)
-        return []
+        logger.error("Neo4j query execution failed: %s | Query: %.200s", e, query.strip())
+        raise

@@ -161,3 +161,62 @@ async def test_hyphenated_clinical_term_tokenization():
     pdl1_facts = await repo.get_approved_facts("PD-L1")
     assert len(pdl1_facts) == 1
     assert pdl1_facts[0]["object"] == "PD-L1"
+
+@pytest.mark.anyio
+async def test_tfidf_incremental_vocabulary_expansion():
+    """Verify that adding facts sequentially dynamically expands the vectorizer vocabulary."""
+    repo = InMemoryGraphRepository()
+    await repo.reset_graph()
+    TFIDFRetriever.reset_cache()
+
+    # 1. Add first fact with restricted vocabulary
+    repo.add_edge({
+        "edge_id": "edge_vocab_01",
+        "subject": {"name": "Apple", "type": "FRUIT"},
+        "relation": "TASTES_LIKE",
+        "object": {"name": "Sweet", "type": "FLAVOR"},
+        "confidence": 1.0,
+        "status": "approved",
+        "approved_by": "tester",
+        "chunk_id": "chk_v1",
+        "chunk_text": "Apples are very sweet."
+    })
+
+    # 2. Add second fact with completely different unseen words
+    repo.add_edge({
+        "edge_id": "edge_vocab_02",
+        "subject": {"name": "Spaceship", "type": "VEHICLE"},
+        "relation": "TRAVELS_TO",
+        "object": {"name": "Mars", "type": "PLANET"},
+        "confidence": 1.0,
+        "status": "approved",
+        "approved_by": "tester",
+        "chunk_id": "chk_v2",
+        "chunk_text": "The new rocket spaceship travels to the red planet Mars."
+    })
+
+    # 3. Add third fact with completely different unseen words
+    repo.add_edge({
+        "edge_id": "edge_vocab_03",
+        "subject": {"name": "Quantum Computer", "type": "MACHINE"},
+        "relation": "USES",
+        "object": {"name": "Qubits", "type": "TECHNOLOGY"},
+        "confidence": 1.0,
+        "status": "approved",
+        "approved_by": "tester",
+        "chunk_id": "chk_v3",
+        "chunk_text": "Quantum computers use entangled qubits for processing."
+    })
+
+    # If the vocabulary bug existed, the vectorizer would only know about "Apple" and "Sweet".
+    # It would completely fail to find "spaceship" or "Mars" because they were out-of-vocabulary.
+
+    # 4. Search for words from the 3rd fact
+    quantum_facts = await repo.get_approved_facts("entangled qubits processing")
+    assert len(quantum_facts) == 1
+    assert quantum_facts[0]["edge_id"] == "edge_vocab_03"
+
+    # 5. Search for words from the 2nd fact
+    space_facts = await repo.get_approved_facts("rocket spaceship Mars")
+    assert len(space_facts) == 1
+    assert space_facts[0]["edge_id"] == "edge_vocab_02"

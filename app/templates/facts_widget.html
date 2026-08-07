@@ -44,7 +44,7 @@
         <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs">
             <div class="flex items-center space-x-2">
                 <span class="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Filter Concept:</span>
-                <select id="conceptSelect" onchange="window.location.href='/ui/facts-widget?concept=' + this.value" class="bg-slate-950 border border-slate-700 text-indigo-300 rounded px-2.5 py-1 font-mono focus:outline-none focus:border-indigo-500">
+                <select id="conceptSelect" onchange="window.location.href='/ui/facts-widget?concept=' + encodeURIComponent(this.value)" class="bg-slate-950 border border-slate-700 text-indigo-300 rounded px-2.5 py-1 font-mono focus:outline-none focus:border-indigo-500">
                     <option value="ALL" {% if concept == "ALL" %}selected{% endif %}>ALL (Every Verified Fact)</option>
                     {% for c in available_concepts %}
                     <option value="{{ c }}" {% if concept == c %}selected{% endif %}>{{ c }}</option>

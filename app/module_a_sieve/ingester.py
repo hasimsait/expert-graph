@@ -9,16 +9,19 @@ from app.services.entity_resolution import get_entity_resolver
 
 logger = logging.getLogger(__name__)
 
+
 async def ingest_sieve_output(
     extraction: ExtractionOutput,
     evaluations: List[CriticEvaluation],
     repo: GraphRepository = None
 ) -> SieveResult:
     """Ingest Critic-verified triples into graph database asynchronously with status 'pending'."""
+    if repo is None:
+        repo = get_graph_repository()
+    
     timestamp = int(time.time())
     processed_records = []
     resolver = await get_entity_resolver()
-    active_repo = repo or get_graph_repository()
     
     # Store/Merge Chunk
     chunk_cypher = """
@@ -47,6 +50,11 @@ async def ingest_sieve_output(
         edge_id = f"edge_{uuid.uuid4().hex[:10]}"
         rel_type = triple.relation.upper().replace(" ", "_")
         
+        # Bug 7 fix: Force concept_mapping.new_relation to match rel_type so
+        # get_pending_queue's OPTIONAL MATCH (c1:Concept {name: type(r)}) finds the mapping
+        if triple.concept_mapping:
+            triple.concept_mapping.new_relation = rel_type
+
         # Handle Meta-Graph concept mapping if present
         if triple.concept_mapping:
             concept_cypher = f"""
@@ -94,48 +102,24 @@ async def ingest_sieve_output(
             "timestamp": timestamp
         }
 
-        db_result = await run_cypher(ingest_cypher, params)
+        # Bug 1 fix: Only count triples that actually reach Neo4j
+        try:
+            db_result = await run_cypher(ingest_cypher, params)
+        except Exception as e:
+            logger.warning(
+                "Failed to ingest triple [%d] edge_id='%s' (%s)-[%s]->(%s): %s",
+                idx, edge_id, triple.subject.name, rel_type, triple.object.name, e
+            )
+            continue
 
         # Entity Resolution (ER) step: Map raw strings to canonical ontology concept
         subj_res = resolver.resolve_entity(triple.subject.name)
         if subj_res:
-            map_cypher = """
-            MATCH (ch:Chunk {id: $chunk_id})
-            MERGE (r:RawEntity {name: $raw_string})
-            MERGE (c:CanonicalConcept {id: $canonical_id})
-            ON CREATE SET c.name = $canonical_name
-            MERGE (ch)-[:MENTIONS]->(r)
-            MERGE (r)-[m:MAPPED_TO]->(c)
-            ON CREATE SET m.confidence = $confidence
-            ON MATCH SET m.confidence = $confidence
-            """
-            await run_cypher(map_cypher, {
-                "chunk_id": extraction.chunk_id,
-                "raw_string": triple.subject.name,
-                "canonical_id": subj_res["canonical_id"],
-                "canonical_name": subj_res["canonical_name"],
-                "confidence": subj_res["confidence"]
-            })
+            await repo.store_er_mapping(extraction.chunk_id, triple.subject.name, subj_res)
 
         obj_res = resolver.resolve_entity(triple.object.name)
         if obj_res:
-            map_cypher = """
-            MATCH (ch:Chunk {id: $chunk_id})
-            MERGE (r:RawEntity {name: $raw_string})
-            MERGE (c:CanonicalConcept {id: $canonical_id})
-            ON CREATE SET c.name = $canonical_name
-            MERGE (ch)-[:MENTIONS]->(r)
-            MERGE (r)-[m:MAPPED_TO]->(c)
-            ON CREATE SET m.confidence = $confidence
-            ON MATCH SET m.confidence = $confidence
-            """
-            await run_cypher(map_cypher, {
-                "chunk_id": extraction.chunk_id,
-                "raw_string": triple.object.name,
-                "canonical_id": obj_res["canonical_id"],
-                "canonical_name": obj_res["canonical_name"],
-                "confidence": obj_res["confidence"]
-            })
+            await repo.store_er_mapping(extraction.chunk_id, triple.object.name, obj_res)
 
         record = {
             "edge_id": edge_id,
@@ -151,9 +135,6 @@ async def ingest_sieve_output(
             "object_resolution": obj_res
         }
 
-        if hasattr(active_repo, "add_edge"):
-            active_repo.add_edge(record)
-
         processed_records.append(record)
 
     return SieveResult(
@@ -161,3 +142,4 @@ async def ingest_sieve_output(
         chunk_text=extraction.chunk_text,
         processed_triples=processed_records
     )
+
