@@ -1,7 +1,7 @@
 import pytest
 from app.module_a_sieve.schemas import ExtractedTriple, Entity, TypoCorrection, CriticEvaluation
 from app.module_a_sieve.critic import validate_and_apply_typo_corrections
-from app.db.repository import get_graph_repository
+from app.main import container
 
 def test_critic_exact_typo_correction():
     triple = ExtractedTriple(
@@ -52,7 +52,7 @@ def test_critic_word_boundary_prevents_substring_corruption():
 
 @pytest.mark.anyio
 async def test_graph_analytics_implications_and_pagerank():
-    repo = get_graph_repository()
+    repo = container.document_repo()
     
     implications = await repo.get_document_implications("doc_101")
     assert isinstance(implications, list)

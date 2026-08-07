@@ -1,8 +1,9 @@
 import pytest
-from app.services.tfidf_retrieval import TFIDFRetriever
+from app.main import container
 from tests.mocks.mock_graph import InMemoryGraphRepository
 
 def test_tfidf_rank_facts_breast_cancer():
+    search_service = container.search_service()
     facts = [
         {
             "edge_id": "edge_88d7e3510e",
@@ -34,13 +35,14 @@ def test_tfidf_rank_facts_breast_cancer():
     ]
 
     query = "What genetic mutations were identified in breast cancer tissue samples?"
-    ranked = TFIDFRetriever.rank_facts(query, facts)
+    ranked = search_service.rank_facts(query, facts)
 
     assert len(ranked) == 1
     assert ranked[0]["edge_id"] == "edge_88d7e3510e"
     assert ranked[0]["object"] == "HER2"
 
 def test_tfidf_rank_facts_financial():
+    search_service = container.search_service()
     facts = [
         {
             "edge_id": "edge_path_01",
@@ -61,7 +63,7 @@ def test_tfidf_rank_facts_financial():
     ]
 
     query = "Acme Corp owes money to Horizon Bank"
-    ranked = TFIDFRetriever.rank_facts(query, facts)
+    ranked = search_service.rank_facts(query, facts)
 
     assert len(ranked) == 1
     assert ranked[0]["edge_id"] == "edge_fin_01"
@@ -74,7 +76,9 @@ async def test_unmocked_tfidf_retrieval_with_mock_graph_store():
     """
     repo = InMemoryGraphRepository()
     await repo.reset_graph()
-    TFIDFRetriever.reset_cache()
+    
+    search_service = container.search_service()
+    search_service.reset_cache()
 
     # 1. Add candidate edges directly into mock graph
     repo.add_edge({
@@ -122,13 +126,15 @@ async def test_unmocked_tfidf_retrieval_with_mock_graph_store():
     })
 
     # 2. Query for HER2 gene biomarker
-    her2_facts = await repo.get_approved_facts("HER2 gene biomarker in breast carcinoma")
+    all_facts = await repo.get_approved_facts()
+    her2_facts = search_service.rank_facts("HER2 gene biomarker in breast carcinoma", all_facts)
     assert len(her2_facts) == 1
     assert her2_facts[0]["edge_id"] == "edge_path_001"
     assert her2_facts[0]["subject"] == "Invasive Ductal Carcinoma"
 
     # 3. Query for financial debt
-    debt_facts = await repo.get_approved_facts("Acme Capital debt liabilities to Global Credit")
+    all_facts = await repo.get_approved_facts()
+    debt_facts = search_service.rank_facts("Acme Capital debt liabilities to Global Credit", all_facts)
     assert len(debt_facts) == 1
     assert debt_facts[0]["edge_id"] == "edge_fin_001"
     assert debt_facts[0]["subject"] == "Acme Capital"
@@ -136,8 +142,8 @@ async def test_unmocked_tfidf_retrieval_with_mock_graph_store():
     # 4. Approve pending edge and verify incremental delta update
     results = await repo.update_edge_status("edge_pending_001", "approved", "Dr_Smith")
     for rec in results:
-        TFIDFRetriever.add_fact_delta(rec)
-    updated_her2_facts = await repo.get_approved_facts("HER2")
+        search_service.add_fact_delta(rec)
+    updated_her2_facts = await repo.search_approved_facts("HER2")
     assert len(updated_her2_facts) >= 1
     assert "edge_pending_001" in {f["edge_id"] for f in updated_her2_facts}
 
@@ -146,7 +152,9 @@ async def test_hyphenated_clinical_term_tokenization():
     """Verify that clinical hyphenated terms (PD-L1, HER2-neu, COVID-19, ER) are preserved cleanly."""
     repo = InMemoryGraphRepository()
     await repo.reset_graph()
-    TFIDFRetriever.reset_cache()
+    
+    search_service = container.search_service()
+    search_service.reset_cache()
 
     edge = {
         "edge_id": "edge_pdl1",
@@ -161,7 +169,7 @@ async def test_hyphenated_clinical_term_tokenization():
     }
     repo.add_edge(edge)
 
-    pdl1_facts = await repo.get_approved_facts("PD-L1")
+    pdl1_facts = await repo.search_approved_facts("PD-L1")
     assert len(pdl1_facts) == 1
     assert pdl1_facts[0]["object"] == "PD-L1"
 
@@ -170,7 +178,9 @@ async def test_tfidf_incremental_vocabulary_expansion():
     """Verify that adding facts sequentially dynamically expands the vectorizer vocabulary."""
     repo = InMemoryGraphRepository()
     await repo.reset_graph()
-    TFIDFRetriever.reset_cache()
+    
+    search_service = container.search_service()
+    search_service.reset_cache()
 
     # 1. Add first fact with restricted vocabulary
     edge1 = {
@@ -218,11 +228,13 @@ async def test_tfidf_incremental_vocabulary_expansion():
     # It would completely fail to find "spaceship" or "Mars" because they were out-of-vocabulary.
 
     # 4. Search for words from the 3rd fact
-    quantum_facts = await repo.get_approved_facts("entangled qubits processing")
+    all_facts = await repo.get_approved_facts()
+    quantum_facts = search_service.rank_facts("entangled qubits processing", all_facts)
     assert len(quantum_facts) == 1
     assert quantum_facts[0]["edge_id"] == "edge_vocab_03"
 
     # 5. Search for words from the 2nd fact
-    space_facts = await repo.get_approved_facts("rocket spaceship Mars")
+    all_facts = await repo.get_approved_facts()
+    space_facts = search_service.rank_facts("rocket spaceship Mars", all_facts)
     assert len(space_facts) == 1
     assert space_facts[0]["edge_id"] == "edge_vocab_02"

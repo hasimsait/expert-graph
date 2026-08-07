@@ -3,7 +3,7 @@ import csv
 import json
 import logging
 from typing import List, Dict, Any, Optional
-from app.db.neo4j_client import run_cypher
+from app.db import neo4j_client
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ async def load_custom_ontology_json(filepath: str) -> Dict[str, int]:
     MERGE (concept:Concept {name: c.name})
     ON CREATE SET concept.description = c.description, concept.created_at = timestamp()
     """
-    await run_cypher(cypher_concepts, {"concepts": concepts})
+    await neo4j_client.run_cypher(cypher_concepts, {"concepts": concepts})
 
     # Load Relationships into Neo4j
     for rel in relationships:
@@ -35,7 +35,7 @@ async def load_custom_ontology_json(filepath: str) -> Dict[str, int]:
         MERGE (c2:Concept {{name: $parent}})
         MERGE (c1)-[r:{rel.get('rel_type', 'SUBCLASS_OF')}]->(c2)
         """
-        await run_cypher(cypher_rel, {"child": rel["child"], "parent": rel["parent"]})
+        await neo4j_client.run_cypher(cypher_rel, {"child": rel["child"], "parent": rel["parent"]})
 
     logger.info("Loaded %d concepts and %d relationships from %s.", len(concepts), len(relationships), filepath)
     return {"concepts_loaded": len(concepts), "relationships_loaded": len(relationships)}
@@ -76,7 +76,7 @@ async def load_umls_rrf(mrconso_path: str, mrrel_path: str, max_records: int = 1
     MERGE (concept:Concept {name: c.name})
     ON CREATE SET concept.cui = c.cui, concept.description = c.description, concept.source = "UMLS"
     """
-    await run_cypher(cypher_umls, {"concepts": concepts_batch})
+    await neo4j_client.run_cypher(cypher_umls, {"concepts": concepts_batch})
 
     rel_count = 0
     if os.path.exists(mrrel_path):
@@ -100,7 +100,7 @@ async def load_umls_rrf(mrconso_path: str, mrrel_path: str, max_records: int = 1
                         MERGE (c2:Concept {{name: $parent}})
                         MERGE (c1)-[r:{rel_type}]->(c2)
                         """
-                        await run_cypher(cypher_rel, {"child": child_name, "parent": parent_name})
+                        await neo4j_client.run_cypher(cypher_rel, {"child": child_name, "parent": parent_name})
                         rel_count += 1
                         if rel_count >= max_records:
                             break

@@ -1,15 +1,27 @@
 import logging
 from typing import List, Dict, Any
-from app.db.repository import GraphRepository, get_graph_repository
+from dependency_injector.wiring import Provide, inject
+from app.core.container import Container
+from app.services.graph_service import GraphService
+from app.services.search_service import SearchService
+from app.db.repository.edge_repo import EdgeRepository
 
 logger = logging.getLogger(__name__)
 
-async def expand_meta_graph_concept(concept_name: str, repo: GraphRepository = None) -> List[str]:
+@inject
+async def expand_meta_graph_concept(
+    concept_name: str,
+    graph_service: GraphService = Provide[Container.graph_service]
+) -> List[str]:
     """Step 1 (Meta-Expansion): Find concept and all descendant subclasses/synonyms asynchronously."""
-    active_repo = repo or get_graph_repository()
-    return await active_repo.expand_meta_graph_concept(concept_name)
+    return await graph_service.expand_meta_graph_concept(concept_name)
 
-async def fetch_approved_facts(query: str = "ALL", repo: GraphRepository = None) -> List[Dict[str, Any]]:
+@inject
+async def fetch_approved_facts(
+    query: str = "ALL",
+    edge_repo: EdgeRepository = Provide[Container.edge_repo],
+    search_service: SearchService = Provide[Container.search_service]
+) -> List[Dict[str, Any]]:
     """Retrieval Engine: TF-IDF Search + Meta-Expansion + Approved Facts asynchronously."""
-    active_repo = repo or get_graph_repository()
-    return await active_repo.get_approved_facts(query=query)
+    db_facts = await edge_repo.search_approved_facts(query)
+    return search_service.rank_facts(query, db_facts)

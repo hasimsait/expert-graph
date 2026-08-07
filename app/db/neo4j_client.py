@@ -71,3 +71,8 @@ async def run_cypher(query: str, parameters: Optional[Dict[str, Any]] = None) ->
         logger.error(
             "Neo4j query execution failed: %s | Query: %.200s", e, query.strip())
         raise
+
+async def reset_neo4j_graph() -> None:
+    """Helper for testing: Deletes all nodes and relationships in the database."""
+    cypher = "MATCH (n) DETACH DELETE n"
+    await run_cypher(cypher)

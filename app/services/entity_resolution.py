@@ -47,17 +47,15 @@ class EntityResolver:
             data = json.load(f)
         self.load_ontology_dict(data)
 
-    async def load_ontology_from_db(self, repo: Optional[Any] = None) -> None:
-        """Dynamically load active ontology concepts via GraphRepository abstraction asynchronously."""
+    async def load_ontology_from_db(self, repo) -> None:
+        """Dynamically load active ontology concepts via ConceptRepository abstraction asynchronously."""
         try:
-            from app.db.repository import get_graph_repository
-            active_repo = repo or get_graph_repository()
-            concepts_dict = await active_repo.get_canonical_concepts()
+            concepts_dict = await repo.get_canonical_concepts()
             if concepts_dict:
                 self.load_ontology_dict(concepts_dict)
-                logger.info("Loaded %d ontology concepts via GraphRepository.", len(concepts_dict))
+                logger.info("Loaded %d ontology concepts via ConceptRepository.", len(concepts_dict))
         except Exception as e:
-            logger.warning("Error fetching ontology concepts from GraphRepository: %s", e)
+            logger.warning("Error fetching ontology concepts from ConceptRepository: %s", e)
 
     def resolve_entity(self, raw_string: str) -> Optional[Dict[str, Any]]:
         """
@@ -88,18 +86,3 @@ class EntityResolver:
             "confidence": round(best_score, 4)
         }
 
-_resolver_instance: Optional[EntityResolver] = None
-
-async def get_entity_resolver(repo: Optional[Any] = None) -> EntityResolver:
-    """Get global EntityResolver singleton or initialize standard instance asynchronously."""
-    global _resolver_instance
-    if _resolver_instance is None:
-        _resolver_instance = EntityResolver()
-        if not _resolver_instance.ontology:
-            await _resolver_instance.load_ontology_from_db(repo=repo)
-    return _resolver_instance
-
-def reset_entity_resolver(resolver: Optional[EntityResolver] = None) -> None:
-    """Reset or override global EntityResolver singleton for testing or runtime reconfig."""
-    global _resolver_instance
-    _resolver_instance = resolver

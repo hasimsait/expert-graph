@@ -1,5 +1,5 @@
 import logging
-from app.db.neo4j_client import run_cypher
+from app.db import neo4j_client
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ async def init_db_schema():
     logger.info("Initializing Neo4j Dual Graph constraints asynchronously...")
     for constraint_cypher in INITIAL_CONSTRAINTS:
         try:
-            await run_cypher(constraint_cypher)
+            await neo4j_client.run_cypher(constraint_cypher)
         except Exception as e:
             logger.warning("Error running constraint query: %s", e)
 
@@ -40,7 +40,7 @@ async def init_db_schema():
         MERGE (c:Concept {name: $name})
         ON CREATE SET c.description = $description, c.created_at = timestamp()
         """
-        await run_cypher(query, concept)
+        await neo4j_client.run_cypher(query, concept)
 
     # Seed Meta-Graph Edges (MERGE concept nodes first to ensure existence)
     for child, parent, rel_type in DEFAULT_META_GRAPH_EDGES:
@@ -49,7 +49,7 @@ async def init_db_schema():
         MERGE (c2:Concept {{name: $parent}})
         MERGE (c1)-[r:{rel_type}]->(c2)
         """
-        await run_cypher(query, {"child": child, "parent": parent})
+        await neo4j_client.run_cypher(query, {"child": child, "parent": parent})
 
 
 

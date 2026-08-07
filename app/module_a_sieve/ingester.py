@@ -3,37 +3,30 @@ import time
 import uuid
 import re
 from typing import List, Dict, Any
-from app.db.neo4j_client import run_cypher
-from app.db.repository import GraphRepository, get_graph_repository
+from dependency_injector.wiring import Provide, inject
+from app.db.repository.document_repo import DocumentRepository
+from app.db.repository.concept_repo import ConceptRepository
+from app.db.repository.edge_repo import EdgeRepository
+from app.core.container import Container
 from app.module_a_sieve.schemas import ExtractionOutput, CriticEvaluation, SieveResult
-from app.services.entity_resolution import get_entity_resolver
+from app.services.entity_resolution import EntityResolver
 
 logger = logging.getLogger(__name__)
 
-
+@inject
 async def ingest_sieve_output(
     extraction: ExtractionOutput,
     evaluations: List[CriticEvaluation],
-    repo: GraphRepository = None
+    repo: DocumentRepository = Provide[Container.document_repo],
+    concept_repo: ConceptRepository = Provide[Container.concept_repo],
+    edge_repo: EdgeRepository = Provide[Container.edge_repo],
+    resolver: EntityResolver = Provide[Container.entity_resolver]
 ) -> SieveResult:
     """Ingest Critic-verified triples into graph database asynchronously with status 'pending'."""
-    if repo is None:
-        repo = get_graph_repository()
-    
     timestamp = int(time.time())
     processed_records = []
-    resolver = await get_entity_resolver()
     
-    # Store/Merge Chunk
-    chunk_cypher = """
-    MERGE (ch:Chunk {id: $chunk_id})
-    ON CREATE SET ch.text = $chunk_text, ch.created_at = $timestamp
-    """
-    await run_cypher(chunk_cypher, {
-        "chunk_id": extraction.chunk_id,
-        "chunk_text": extraction.chunk_text,
-        "timestamp": timestamp
-    })
+    await repo.store_chunk(extraction.chunk_id, extraction.chunk_text, timestamp)
 
     eval_map = {eval_item.triple_index: eval_item for eval_item in evaluations}
 
@@ -67,54 +60,25 @@ async def ingest_sieve_output(
             if not mapping_type:
                 mapping_type = "RELATED_TO"
 
-            concept_cypher = f"""
-            MERGE (c1:Concept {{name: $new_relation}})
-            MERGE (c2:Concept {{name: $existing_concept}})
-            MERGE (c1)-[:`{mapping_type}`]->(c2)
-            """
-            await run_cypher(concept_cypher, {
-                "new_relation": triple.concept_mapping.new_relation,
-                "existing_concept": triple.concept_mapping.existing_concept
-            })
+            await concept_repo.store_concept_mapping(
+                triple.concept_mapping.new_relation,
+                triple.concept_mapping.existing_concept,
+                mapping_type
+            )
 
         # Insert Entities & Dynamic Data-Graph Edge
-        ingest_cypher = f"""
-        MATCH (ch:Chunk {{id: $chunk_id}})
-        
-        MERGE (s:Entity {{name: $subj_name}})
-        ON CREATE SET s.type = $subj_type
-        
-        MERGE (o:Entity {{name: $obj_name}})
-        ON CREATE SET o.type = $obj_type
-        
-        MERGE (ch)-[:MENTIONS]->(s)
-        MERGE (ch)-[:MENTIONS]->(o)
-        
-        CREATE (s)-[r:`{rel_type}` {{
-            edge_id: $edge_id,
-            chunk_id: $chunk_id,
-            confidence: $confidence,
-            status: "pending",
-            approved_by: "",
-            timestamp: $timestamp
-        }}]->(o)
-        RETURN r
-        """
-        
-        params = {
-            "subj_name": triple.subject.name,
-            "subj_type": triple.subject.type,
-            "obj_name": triple.object.name,
-            "obj_type": triple.object.type,
-            "chunk_id": extraction.chunk_id,
-            "edge_id": edge_id,
-            "confidence": crit.confidence,
-            "timestamp": timestamp
-        }
-
-        # Bug 1 fix: Only count triples that actually reach Neo4j
         try:
-            db_result = await run_cypher(ingest_cypher, params)
+            await edge_repo.create_pending_edge(
+                chunk_id=extraction.chunk_id,
+                edge_id=edge_id,
+                subj_name=triple.subject.name,
+                subj_type=triple.subject.type,
+                obj_name=triple.object.name,
+                obj_type=triple.object.type,
+                rel_type=rel_type,
+                confidence=crit.confidence,
+                timestamp=timestamp
+            )
         except Exception as e:
             logger.warning(
                 "Failed to ingest triple [%d] edge_id='%s' (%s)-[%s]->(%s): %s",

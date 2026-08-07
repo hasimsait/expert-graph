@@ -2,7 +2,7 @@ import json
 import logging
 from fastmcp import FastMCP
 from app.config import settings
-from app.module_c_mcp.retrieval import fetch_approved_facts
+from app.module_c_mcp import retrieval
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ async def retrieve_verified_facts(query: str = "ALL") -> str:
         query: Search query, topic, or concept to retrieve facts for (e.g. 'breast cancer', 'HER2', 'mutation', 'OWES_DEBT', or 'ALL').
     """
     from urllib.parse import quote
-    facts = await fetch_approved_facts(query=query)
+    facts = await retrieval.fetch_approved_facts(query=query)
     base_url = getattr(settings, "BASE_URL", "http://localhost:8000")
     
     encoded_query = quote(query)

@@ -1,8 +1,7 @@
 import pytest
 import asyncio
+from app.main import container
 from app.db.neo4j_client import run_cypher, Neo4jConnection
-from app.db.repository import get_graph_repository
-from app.services.tfidf_retrieval import TFIDFRetriever
 from app.module_c_mcp.retrieval import fetch_approved_facts
 
 pytestmark = pytest.mark.integration
@@ -74,8 +73,9 @@ async def test_mcp_rag_breast_cancer_query():
     """Test the complete RAG MCP extraction pipeline against the live database without LLMs."""
     
     # 1. Start with an empty TF-IDF cache
-    TFIDFRetriever.reset_cache()
-    repo = get_graph_repository()
+    search_service = container.search_service()
+    search_service.reset_cache()
+    repo = container.edge_repo()
 
     # 2. Before approval, search for breast cancer. The pending 'test_edge_5' should NOT be returned.
     query = "What genetic mutations were identified in breast cancer tissue samples?"
@@ -86,7 +86,7 @@ async def test_mcp_rag_breast_cancer_query():
     assert len(edge_5_before) == 0
 
     # 3. Simulate the user approving the fact in the UI Dashboard!
-    # This calls TFIDFRetriever.add_fact_delta() internally, testing our vocabulary expansion fix!
+    # This calls get_search_service().add_fact_delta() internally, testing our vocabulary expansion fix!
     await repo.update_edge_status("test_edge_5", "approved", "Dr_Test_Pathologist")
 
     # 4. Search again exactly what the user queried in the UI / MCP

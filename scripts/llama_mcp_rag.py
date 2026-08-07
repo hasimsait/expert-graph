@@ -7,6 +7,7 @@ import logging
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from app.main import container
 from app.config import settings
 from app.module_c_mcp.mcp_server import retrieve_verified_facts
 

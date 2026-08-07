@@ -1,9 +1,10 @@
 import pytest
 import asyncio
-from app.services.tfidf_retrieval import TFIDFRetriever
+from app.main import container
 
 def test_dynamic_vocab_append():
-    TFIDFRetriever.reset_cache()
+    search_service = container.search_service()
+    search_service.reset_cache()
     
     # Simulate DB load with just one document
     doc1 = {
@@ -17,8 +18,8 @@ def test_dynamic_vocab_append():
     }
     
     # Initialize index
-    TFIDFRetriever.add_fact_delta(doc1)
-    initial_vocab_size = len(TFIDFRetriever._vectorizer.vocabulary_)
+    search_service.add_fact_delta(doc1)
+    initial_vocab_size = len(search_service._vectorizer.vocabulary_)
     
     # Now simulate delta append with ENTIRELY NOVEL words
     doc2 = {
@@ -31,13 +32,13 @@ def test_dynamic_vocab_append():
         "chunk_text": "The TARDIS travels through space and time vortex."
     }
     
-    TFIDFRetriever.add_fact_delta(doc2)
-    new_vocab_size = len(TFIDFRetriever._vectorizer.vocabulary_)
+    search_service.add_fact_delta(doc2)
+    new_vocab_size = len(search_service._vectorizer.vocabulary_)
     
     assert new_vocab_size > initial_vocab_size, "Vocabulary should expand with novel words"
     
     # Query for the completely novel word
-    results = TFIDFRetriever.rank_facts("TARDIS", [doc1, doc2])
+    results = search_service.rank_facts("TARDIS", [doc1, doc2])
     
     # Since we are using true TF-IDF, it should match the novelty, 
     # not fall back to the unranked DB facts

@@ -1,14 +1,15 @@
 import time
 import logging
 from typing import List, Dict, Any, Optional
-from app.db.repository import GraphRepository
+from app.db.repository.edge_repo import EdgeRepository
+from app.db.repository.concept_repo import ConceptRepository
+from app.db.repository.document_repo import DocumentRepository
 
 logger = logging.getLogger(__name__)
 
-class InMemoryGraphRepository(GraphRepository):
+class InMemoryGraphRepository(EdgeRepository, ConceptRepository, DocumentRepository):
     """
-    In-memory test double repository implementation of GraphRepository
-    used exclusively in automated test suites (pytest).
+    In-memory test double repository implementing the Edge, Concept, and Document interfaces.
     """
 
     def __init__(self):
@@ -136,6 +137,26 @@ class InMemoryGraphRepository(GraphRepository):
             )
         self.edges.append(edge_dict)
 
+    async def store_chunk(self, chunk_id: str, chunk_text: str, timestamp: int) -> None:
+        self.documents[chunk_id] = {"id": chunk_id, "title": chunk_text[:40] if chunk_text else chunk_id, "type": "Chunk"}
+
+    async def store_concept_mapping(self, new_relation: str, existing_concept: str, mapping_type: str) -> None:
+        self.add_meta_concept(new_relation, existing_concept, mapping_type)
+
+    async def create_pending_edge(self, chunk_id: str, edge_id: str, subj_name: str, subj_type: str, obj_name: str, obj_type: str, rel_type: str, confidence: float, timestamp: int) -> None:
+        self.edges.append({
+            "edge_id": edge_id,
+            "subject": {"name": subj_name, "type": subj_type},
+            "relation": rel_type,
+            "object": {"name": obj_name, "type": obj_type},
+            "confidence": confidence,
+            "status": "pending",
+            "approved_by": "",
+            "timestamp": timestamp,
+            "chunk_id": chunk_id,
+            "chunk_text": self.documents.get(chunk_id, {}).get("title", "")
+        })
+
     async def get_pending_queue(self, limit: int = 20) -> List[Dict[str, Any]]:
         pending = []
         for edge in self.edges:
@@ -198,9 +219,12 @@ class InMemoryGraphRepository(GraphRepository):
 
         if concept_upper in ["ALL", "RELATIONSHIP", "*", ""]:
             return all_approved
+            
+        # Basic filtering for mock search
+        return [f for f in all_approved if concept_upper in f.get("relation", "").upper() or concept_upper in f.get("subject", "").upper() or concept_upper in f.get("object", "").upper()]
 
-        from app.services.tfidf_retrieval import TFIDFRetriever
-        return TFIDFRetriever.rank_facts(search_term, all_approved)
+    async def search_approved_facts(self, query: str) -> List[Dict[str, Any]]:
+        return await self.get_approved_facts(query)
 
     async def get_stats(self) -> Dict[str, int]:
         stats = {"pending": 0, "approved": 0, "rejected": 0}
@@ -309,8 +333,10 @@ class InMemoryGraphRepository(GraphRepository):
         self.canonical_concepts = {}
         self.downstream_implications = []
         self.concept_links = []
-        from app.services.tfidf_retrieval import TFIDFRetriever
-        TFIDFRetriever.invalidate_cache()
+        self.downstream_implications = []
+        self.concept_links = []
+        from app.main import container
+        container.search_service().reset_cache()
 
     async def store_er_mapping(self, chunk_id: str, raw_string: str, res: Dict[str, Any]) -> None:
         self.raw_entities.append({

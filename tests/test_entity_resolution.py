@@ -2,9 +2,10 @@ import os
 import json
 import pytest
 from sklearn.feature_extraction.text import TfidfVectorizer
-from app.services.entity_resolution import EntityResolver, get_entity_resolver, reset_entity_resolver
+from app.services.entity_resolution import EntityResolver
 from app.module_a_sieve.schemas import ExtractionOutput, ExtractedTriple, Entity, CriticEvaluation
 from app.module_a_sieve.ingester import ingest_sieve_output
+from app.main import container
 
 MOCK_ONTOLOGY = {
     "C001": "Invasive Ductal Carcinoma",
@@ -62,49 +63,46 @@ def test_ontology_loading_from_env(tmp_path, monkeypatch):
 @pytest.mark.anyio
 async def test_graph_ingester_entity_resolution_integration():
     """Test that Graph Ingester performs ER and maps raw text entities to canonical concepts."""
+    # Temporarily override entity resolver to use mock ontology for this test
     resolver = EntityResolver(ontology_dict=MOCK_ONTOLOGY)
-    reset_entity_resolver(resolver)
-    
-    extraction = ExtractionOutput(
-        chunk_id="er_test_chk_01",
-        chunk_text="Patient presents with invasive ductal breast carcinoma.",
-        triples=[
-            ExtractedTriple(
-                subject=Entity(name="invasive ductal breast carcinoma", type="DISEASE"),
-                relation="DIAGNOSED_WITH",
-                object=Entity(name="Breast biopsy", type="PROCEDURE")
-            )
+    with container.entity_resolver.override(resolver):
+        extraction = ExtractionOutput(
+            chunk_id="er_test_chk_01",
+            chunk_text="Patient presents with invasive ductal breast carcinoma.",
+            triples=[
+                ExtractedTriple(
+                    subject=Entity(name="invasive ductal breast carcinoma", type="DISEASE"),
+                    relation="DIAGNOSED_WITH",
+                    object=Entity(name="Breast biopsy", type="PROCEDURE")
+                )
+            ]
+        )
+        evaluations = [
+            CriticEvaluation(triple_index=0, is_valid=True, confidence=0.95, critique_notes="Valid diagnosis")
         ]
-    )
-    evaluations = [
-        CriticEvaluation(triple_index=0, is_valid=True, confidence=0.95, critique_notes="Valid diagnosis")
-    ]
-    
-    sieve_res = await ingest_sieve_output(extraction, evaluations)
-    assert len(sieve_res.processed_triples) == 1
-    processed = sieve_res.processed_triples[0]
-    
-    assert processed["subject_resolution"] is not None
-    assert processed["subject_resolution"]["canonical_id"] == "C001"
-    assert processed["subject_resolution"]["confidence"] > 0.6
-    
-    # Cleanup global resolver
-    reset_entity_resolver(None)
+        
+        sieve_res = await ingest_sieve_output(extraction, evaluations)
+        assert len(sieve_res.processed_triples) == 1
+        processed = sieve_res.processed_triples[0]
+        
+        assert processed["subject_resolution"] is not None
+        assert processed["subject_resolution"]["canonical_id"] == "C001"
+        assert processed["subject_resolution"]["confidence"] > 0.6
 
 @pytest.mark.anyio
 async def test_dynamic_entity_resolver_refresh():
     """Verify that the EntityResolver ontology can be refreshed in real-time from the database."""
-    from app.db.repository import get_graph_repository
-    repo = get_graph_repository()
+    repo = container.edge_repo()
+    concept_repo = container.concept_repo()
     await repo.reset_graph()
-    reset_entity_resolver(None)
-
+    resolver = EntityResolver()
+    
     # 1. Initially, concept 'HER2 Biomarker' is not in repo
-    resolver = await get_entity_resolver(repo=repo)
     assert resolver.resolve_entity("HER2 Biomarker") is None
 
     # 2. Add new concept to repo canonical concepts and add an edge
-    repo.canonical_concepts["C_HER2"] = {"name": "HER2 Biomarker"}
+    if hasattr(concept_repo, "canonical_concepts"):
+        concept_repo.canonical_concepts["C_HER2"] = {"name": "HER2 Biomarker"}
     repo.add_edge({
         "edge_id": "edge_her2_dynamic",
         "subject": {"name": "Invasive Ductal Carcinoma", "type": "DISEASE"},
@@ -116,7 +114,7 @@ async def test_dynamic_entity_resolver_refresh():
 
     # 3. Approve the edge and reload ontology (simulating router behavior)
     await repo.update_edge_status("edge_her2_dynamic", "approved", "Dr_Smith")
-    await resolver.load_ontology_from_db(repo=repo)
+    await resolver.load_ontology_from_db(concept_repo)
 
     # 4. Verify EntityResolver now dynamically resolves 'HER2 Biomarker'
     res = resolver.resolve_entity("HER2 Biomarker")
