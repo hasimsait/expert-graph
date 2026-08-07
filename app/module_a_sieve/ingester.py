@@ -1,6 +1,7 @@
 import logging
 import time
 import uuid
+import re
 from typing import List, Dict, Any
 from app.db.neo4j_client import run_cypher
 from app.db.repository import GraphRepository, get_graph_repository
@@ -49,6 +50,10 @@ async def ingest_sieve_output(
 
         edge_id = f"edge_{uuid.uuid4().hex[:10]}"
         rel_type = triple.relation.upper().replace(" ", "_")
+        # Target specific injection method: strip backticks to prevent escaping Cypher quotes
+        rel_type = rel_type.replace("`", "")
+        if not rel_type:
+            rel_type = "UNKNOWN_RELATION"
         
         # Bug 7 fix: Force concept_mapping.new_relation to match rel_type so
         # get_pending_queue's OPTIONAL MATCH (c1:Concept {name: type(r)}) finds the mapping
@@ -57,10 +62,15 @@ async def ingest_sieve_output(
 
         # Handle Meta-Graph concept mapping if present
         if triple.concept_mapping:
+            mapping_type = triple.concept_mapping.mapping_type.upper().replace(" ", "_")
+            mapping_type = mapping_type.replace("`", "")
+            if not mapping_type:
+                mapping_type = "RELATED_TO"
+
             concept_cypher = f"""
             MERGE (c1:Concept {{name: $new_relation}})
             MERGE (c2:Concept {{name: $existing_concept}})
-            MERGE (c1)-[:{triple.concept_mapping.mapping_type}]->(c2)
+            MERGE (c1)-[:`{mapping_type}`]->(c2)
             """
             await run_cypher(concept_cypher, {
                 "new_relation": triple.concept_mapping.new_relation,
@@ -80,7 +90,7 @@ async def ingest_sieve_output(
         MERGE (ch)-[:MENTIONS]->(s)
         MERGE (ch)-[:MENTIONS]->(o)
         
-        CREATE (s)-[r:{rel_type} {{
+        CREATE (s)-[r:`{rel_type}` {{
             edge_id: $edge_id,
             chunk_id: $chunk_id,
             confidence: $confidence,

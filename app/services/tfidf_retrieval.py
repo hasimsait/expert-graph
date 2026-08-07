@@ -73,21 +73,30 @@ class TFIDFRetriever:
         if not to_add:
             return
 
-        # Scikit-learn TfidfVectorizer cannot incrementally learn new vocabulary words.
-        # If we use vstack with transform(), any words in new facts that weren't in the initial 
-        # training corpus are completely ignored, making them unsearchable.
-        # Since fitting on thousands of short facts is virtually instantaneous, we simply 
-        # re-fit the entire index.
-        cls._indexed_facts.extend(to_add)
-        
-        all_corpus = [cls._format_fact_doc(f) for f in cls._indexed_facts]
-        
-        try:
+        # Initialize the vectorizer if this is the first batch
+        if cls._vectorizer is None:
+            # Note: TfidfVectorizer requires an initial corpus to build vocabulary.
+            # Once fitted, it uses that vocabulary for all future transforms.
             cls._vectorizer = TfidfVectorizer(ngram_range=(1, 2), stop_words='english', lowercase=True)
-            cls._doc_matrix = cls._vectorizer.fit_transform(all_corpus)
-            logger.info("Re-fitted TF-IDF matrix with %d new fact(s). Total index size: %d.", len(to_add), len(cls._indexed_facts))
+            try:
+                cls._doc_matrix = cls._vectorizer.fit_transform(to_add_corpus)
+                cls._indexed_facts.extend(to_add)
+                logger.info("Initialized TF-IDF matrix with %d initial fact(s). Total index size: %d.", len(to_add), len(cls._indexed_facts))
+            except Exception as e:
+                logger.warning("Error initializing TF-IDF index: %s", e)
+            return
+
+        # Scikit-learn TfidfVectorizer cannot incrementally learn new vocabulary words.
+        # However, for our Delta TF-IDF, we explicitly want to append facts as rows
+        # using the EXISTING vocabulary, rather than blocking the event loop on every
+        # approval with a full fit_transform of potentially hundreds of thousands of facts.
+        try:
+            new_matrix = cls._vectorizer.transform(to_add_corpus)
+            cls._doc_matrix = vstack([cls._doc_matrix, new_matrix])
+            cls._indexed_facts.extend(to_add)
+            logger.info("Delta-appended %d new fact(s) to TF-IDF matrix using vstack. Total index size: %d.", len(to_add), len(cls._indexed_facts))
         except Exception as e:
-            logger.warning("Error re-fitting TF-IDF index: %s", e)
+            logger.warning("Error appending to TF-IDF index via vstack: %s", e)
 
     @classmethod
     def remove_fact_delta(cls, edge_id: str) -> None:

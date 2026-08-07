@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def _apply_typo_to_string(text: str, typo: str, rep: str) -> str:
     pattern = r'\b' + re.escape(typo) + r'\b'
     if re.search(pattern, text, flags=re.IGNORECASE):
-        new_text = re.sub(pattern, rep, text, flags=re.IGNORECASE)
+        new_text = re.sub(pattern, lambda m: rep, text, flags=re.IGNORECASE)
         logger.info("Accepted Critic typo edit: '%s' -> '%s' (Result: '%s')", typo, rep, new_text)
         return new_text
         
