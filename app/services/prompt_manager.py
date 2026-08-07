@@ -1,6 +1,7 @@
 import os
 import logging
 from typing import Optional
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +68,8 @@ class PromptManager:
         self.prompts_dir = prompts_dir
 
     def _load_prompt(self, env_key: str, filename: str, default: str) -> str:
-        # 1. Try environment variable
-        if env_val := os.getenv(env_key):
+        # 1. Try environment variable via settings
+        if env_val := getattr(settings, env_key, None):
             return env_val
 
         # 2. Try file in prompts_dir

@@ -10,6 +10,7 @@ from app.module_b_annotator.router import router as annotator_router
 from app.module_c_mcp.ui_widget import router as ui_widget_router
 from app.api.analytics import router as analytics_router
 from app.module_c_mcp.mcp_server import mcp_http
+from app.services.tfidf_retrieval import TFIDFRetriever
 
 from app.db.neo4j_client import Neo4jConnection
 
@@ -22,7 +23,6 @@ async def lifespan(fastapi_app: FastAPI):
     logger.info("Starting ExpertGraph server — initializing Dual Graph database schema...")
     try:
         await init_db_schema()
-        from app.services.tfidf_retrieval import TFIDFRetriever
         await TFIDFRetriever.warmup_from_db()
     except Exception as e:
         logger.warning("Database initialization warning: %s", e)

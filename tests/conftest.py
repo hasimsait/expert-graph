@@ -35,6 +35,18 @@ def setup_test_repository(monkeypatch, request):
         
         yield test_repo
         
+        async def cleanup():
+            from app.db.neo4j_client import run_cypher
+            # Clean up edges, chunks, and orphaned entities created by tests
+            await run_cypher("MATCH ()-[r]->() WHERE r.chunk_id STARTS WITH 'test_' DELETE r")
+            await run_cypher("MATCH (c:Chunk) WHERE c.id STARTS WITH 'test_' DETACH DELETE c")
+            await run_cypher("MATCH (n:Entity) WHERE NOT (n)--() DETACH DELETE n")
+            
+        try:
+            asyncio.run(cleanup())
+        except Exception as e:
+            print("Failed to clean up integration test database:", e)
+
         TFIDFRetriever.reset_cache()
         from app.db.neo4j_client import Neo4jConnection
         # Clear the driver cache so the next test (in a new event loop) recreates it

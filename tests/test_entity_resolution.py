@@ -92,8 +92,8 @@ async def test_graph_ingester_entity_resolution_integration():
     reset_entity_resolver(None)
 
 @pytest.mark.anyio
-async def test_dynamic_entity_resolver_refresh_on_approval():
-    """Verify that approving an edge dynamically refreshes EntityResolver ontology in real-time."""
+async def test_dynamic_entity_resolver_refresh():
+    """Verify that the EntityResolver ontology can be refreshed in real-time from the database."""
     from app.db.repository import get_graph_repository
     repo = get_graph_repository()
     await repo.reset_graph()
@@ -114,8 +114,9 @@ async def test_dynamic_entity_resolver_refresh_on_approval():
         "chunk_id": "chk_dynamic_01"
     })
 
-    # 3. Approve the edge -> triggers automatic EntityResolver reload
+    # 3. Approve the edge and reload ontology (simulating router behavior)
     await repo.update_edge_status("edge_her2_dynamic", "approved", "Dr_Smith")
+    await resolver.load_ontology_from_db(repo=repo)
 
     # 4. Verify EntityResolver now dynamically resolves 'HER2 Biomarker'
     res = resolver.resolve_entity("HER2 Biomarker")

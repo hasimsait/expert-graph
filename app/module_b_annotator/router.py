@@ -6,6 +6,11 @@ from app.db.repository import GraphRepository, get_graph_repository
 from app.module_a_sieve.extractor import extract_triples
 from app.module_a_sieve.critic import evaluate_triples
 from app.module_a_sieve.ingester import ingest_sieve_output
+from app.services.tfidf_retrieval import TFIDFRetriever
+from app.services.entity_resolution import get_entity_resolver
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Annotator Dashboard"])
 
@@ -41,7 +46,16 @@ async def approve_edge(
     repo: GraphRepository = Depends(get_graph_repository)
 ):
     """Approve a pending edge in the active graph repository asynchronously."""
-    await repo.update_edge_status(edge_id, "approved", body.user_id)
+    results = await repo.update_edge_status(edge_id, "approved", body.user_id)
+    if results:
+        for rec in results:
+            TFIDFRetriever.add_fact_delta(rec)
+        try:
+            resolver = await get_entity_resolver()
+            await resolver.load_ontology_from_db()
+        except Exception as e:
+            logger.warning("Error refreshing EntityResolver on edge approval: %s", e)
+
     return {"status": "approved", "edge_id": edge_id, "approved_by": body.user_id}
 
 @router.post("/reject/{edge_id}")
@@ -51,7 +65,10 @@ async def reject_edge(
     repo: GraphRepository = Depends(get_graph_repository)
 ):
     """Reject a pending edge in the active graph repository asynchronously."""
-    await repo.update_edge_status(edge_id, "rejected", body.user_id)
+    results = await repo.update_edge_status(edge_id, "rejected", body.user_id)
+    if results:
+        for rec in results:
+            TFIDFRetriever.remove_fact_delta(rec.get("edge_id") or edge_id)
     return {"status": "rejected", "edge_id": edge_id, "rejected_by": body.user_id}
 
 @router.get("/stats")

@@ -150,26 +150,29 @@ class InMemoryGraphRepository(GraphRepository):
                     break
         return pending
 
-    async def update_edge_status(self, edge_id: str, status: str, user_id: str) -> bool:
+    async def update_edge_status(self, edge_id: str, status: str, user_id: str) -> List[Dict[str, Any]]:
         now = int(time.time())
-        updated = False
+        updated_edges = []
         for edge in self.edges:
             if edge.get("edge_id") == edge_id or (edge.get("status") == "pending" and edge.get("chunk_id") == edge_id):
                 edge["status"] = status
                 edge["approved_by"] = user_id
                 edge["timestamp"] = now
-                updated = True
-        if updated:
-            from app.services.tfidf_retrieval import TFIDFRetriever
-            from app.services.entity_resolution import get_entity_resolver
-            TFIDFRetriever.invalidate_cache()
-            if status == "approved":
-                try:
-                    resolver = await get_entity_resolver(repo=self)
-                    await resolver.load_ontology_from_db(repo=self)
-                except Exception:
-                    pass
-        return updated
+                fact = {
+                    "edge_id": edge.get("edge_id"),
+                    "subject": edge["subject"]["name"] if isinstance(edge["subject"], dict) else edge["subject"],
+                    "subject_type": edge["subject"].get("type", "ENTITY") if isinstance(edge["subject"], dict) else "ENTITY",
+                    "relation": edge.get("relation"),
+                    "object": edge["object"]["name"] if isinstance(edge["object"], dict) else edge["object"],
+                    "object_type": edge["object"].get("type", "ENTITY") if isinstance(edge["object"], dict) else "ENTITY",
+                    "confidence": edge.get("confidence", 0.95),
+                    "approved_by": user_id,
+                    "timestamp": now,
+                    "chunk_id": edge.get("chunk_id"),
+                    "chunk_text": edge.get("chunk_text")
+                }
+                updated_edges.append(fact)
+        return updated_edges
 
     async def get_approved_facts(self, query: str = "ALL") -> List[Dict[str, Any]]:
         search_term = (query or "ALL").strip()

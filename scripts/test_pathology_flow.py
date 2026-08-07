@@ -45,6 +45,7 @@ async def run_pathology_flow(server_url:str = "http://localhost:8000"):
         reset_res = await client.post("/api/reset")
         assert reset_res.status_code == 200
         print("  ✓ Database & Queue reset cleanly.\n")
+
         # Step 2: Load Medical Ontology Domain Baseline
         print("Step 2: Loading Medical Ontology Domain Baseline into Meta-Graph...")
         sample_json_path = os.path.join(os.path.dirname(__file__), "sample_medical_ontology.json")

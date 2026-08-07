@@ -2,9 +2,11 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
+import re
 from app.db.neo4j_client import run_cypher
 
 logger = logging.getLogger(__name__)
+
 
 class GraphRepository(ABC):
     """Abstract Repository interface for Graph Database operations."""
@@ -14,7 +16,7 @@ class GraphRepository(ABC):
         pass
 
     @abstractmethod
-    async def update_edge_status(self, edge_id: str, status: str, user_id: str) -> bool:
+    async def update_edge_status(self, edge_id: str, status: str, user_id: str) -> List[Dict[str, Any]]:
         pass
 
     @abstractmethod
@@ -77,7 +79,8 @@ class Neo4jGraphRepository(GraphRepository):
                 "confidence": res["confidence"]
             })
         except Exception as e:
-            logger.warning("Failed to store ER mapping for '%s': %s", raw_string, e)
+            logger.warning(
+                "Failed to store ER mapping for '%s': %s", raw_string, e)
 
     async def get_pending_queue(self, limit: int = 20) -> List[Dict[str, Any]]:
         cypher = """
@@ -136,21 +139,7 @@ class Neo4jGraphRepository(GraphRepository):
             ch.text AS chunk_text
         """
         results = await run_cypher(cypher, {"edge_id": edge_id, "status": status, "user_id": user_id, "timestamp": int(time.time())})
-        if results:
-            from app.services.tfidf_retrieval import TFIDFRetriever
-            from app.services.entity_resolution import get_entity_resolver
-            if status == "approved":
-                for rec in results:
-                    TFIDFRetriever.add_fact_delta(rec)
-                try:
-                    resolver = await get_entity_resolver()
-                    await resolver.load_ontology_from_db()
-                except Exception as e:
-                    logger.warning("Error refreshing EntityResolver on edge approval: %s", e)
-            elif status in ["rejected", "deleted"]:
-                for rec in results:
-                    TFIDFRetriever.remove_fact_delta(rec.get("edge_id") or edge_id)
-        return len(results) > 0
+        return results
 
     async def expand_meta_graph_concept(self, concept_name: str) -> List[str]:
         concept_upper = concept_name.upper()
@@ -191,8 +180,8 @@ class Neo4jGraphRepository(GraphRepository):
             """
             db_facts = await run_cypher(cypher)
         else:
-            import re
-            raw_tokens = [t.strip().lower() for t in re.split(r'\s+', search_term) if t.strip()]
+            raw_tokens = [t.strip().lower()
+                          for t in re.split(r'\s+', search_term) if t.strip()]
             tokens = []
             for t in raw_tokens:
                 clean_t = re.sub(r'^[^\w-]+|[^\w-]+$', '', t)
@@ -312,6 +301,8 @@ class Neo4jGraphRepository(GraphRepository):
         results = await run_cypher(cypher, {"document_id": document_id})
         if not results:
             cypher_fallback = """
+            MATCH (doc)
+            WHERE (doc:SourceDocument OR doc:Chunk) AND (COALESCE(doc.id, doc.chunk_id) = $document_id OR $document_id IN ["ALL", "ALL_DOCS", ""])
             MATCH (doc)-[:CONTAINS|MENTIONS|MAPPED_TO*1..3]->(c:CanonicalConcept)
             MATCH (c)-[:RELATED_TO]-(imp:DownstreamImplication)
             RETURN DISTINCT COALESCE(doc.id, doc.chunk_id, $document_id) AS document_id,
@@ -329,22 +320,36 @@ class Neo4jGraphRepository(GraphRepository):
 
     async def run_concept_pagerank(self) -> List[Dict[str, Any]]:
         try:
-            cypher = """
-            CALL gds.pageRank.stream({
-              nodeProjection: 'CanonicalConcept',
-              relationshipProjection: { RELATED_TO: { type: 'RELATED_TO', orientation: 'UNDIRECTED' } }
-            })
-            YIELD nodeId, score
-            RETURN gds.util.asNode(nodeId).id AS concept_id,
-                   gds.util.asNode(nodeId).name AS concept_name,
-                   score
-            ORDER BY score DESC LIMIT 10
+            import uuid
+            graph_name = f"pagerankGraph_{uuid.uuid4().hex}"
+
+            project_cypher = f"""
+            CALL gds.graph.project(
+              '{graph_name}',
+              'CanonicalConcept',
+              {{ RELATED_TO: {{ type: 'RELATED_TO', orientation: 'UNDIRECTED' }} }}
+            ) YIELD graphName
             """
-            results = await run_cypher(cypher)
-            if results:
-                return results
-        except Exception:
-            pass
+            await run_cypher(project_cypher)
+
+            try:
+                pagerank_cypher = f"""
+                CALL gds.pageRank.stream('{graph_name}')
+                YIELD nodeId, score
+                RETURN gds.util.asNode(nodeId).id AS concept_id,
+                       gds.util.asNode(nodeId).name AS concept_name,
+                       score
+                ORDER BY score DESC LIMIT 10
+                """
+                results = await run_cypher(pagerank_cypher)
+                if results:
+                    return results
+            finally:
+                drop_cypher = f"CALL gds.graph.drop('{graph_name}', false) YIELD graphName"
+                await run_cypher(drop_cypher)
+        except Exception as e:
+            logger.debug(
+                "GDS PageRank failed (plugin missing?), falling back to centrality: %s", e)
 
         cypher_centrality = """
         MATCH (c)
@@ -388,12 +393,14 @@ class Neo4jGraphRepository(GraphRepository):
 # Repository Factory / Dependency Injector
 _default_repo: Optional[GraphRepository] = None
 
+
 def get_graph_repository() -> GraphRepository:
     """Dependency provider function for FastAPI Depends() and business logic."""
     global _default_repo
     if _default_repo is None:
         _default_repo = Neo4jGraphRepository()
     return _default_repo
+
 
 def set_graph_repository(repo: GraphRepository) -> None:
     """Override default repository instance (used primarily in test fixtures)."""

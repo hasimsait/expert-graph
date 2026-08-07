@@ -33,6 +33,7 @@ def test_annotator_api():
     with TestClient(app) as client:
         # Ingest text first via API
         ingest_res = client.post("/api/ingest", json={
+            "chunk_id": "test_api_chk_1",
             "text": "Apex Corp filed a lawsuit against Cyber Dynamics."
         })
         assert ingest_res.status_code == 200
@@ -89,7 +90,7 @@ def test_health_and_stateless_mcp():
 def test_pathology_ingestion_and_queue():
     with TestClient(app) as client:
         ingest_res = client.post("/api/ingest", json={
-            "chunk_id": "PATH_TEST_99",
+            "chunk_id": "test_path_99",
             "text": "SPECIMEN: Breast biopsy. DIAGNOSIS: Invasive Ductal Carcinoma overexpressing HER2 receptor."
         })
         assert ingest_res.status_code == 200
@@ -98,5 +99,5 @@ def test_pathology_ingestion_and_queue():
         queue_res = client.get("/api/queue")
         assert queue_res.status_code == 200
         queue = queue_res.json()["queue"]
-        assert any(q["chunk_id"] == "PATH_TEST_99" for q in queue)
+        assert any(q["chunk_id"] == "test_path_99" for q in queue)
 

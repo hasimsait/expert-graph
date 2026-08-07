@@ -6,6 +6,7 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+
 class Neo4jConnection:
     _driver: Optional[AsyncDriver] = None
 
@@ -19,7 +20,8 @@ class Neo4jConnection:
                     auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD)
                 )
                 await cls._driver.verify_connectivity()
-                logger.info("Connected to Neo4j AsyncDriver successfully at %s", settings.NEO4J_URI)
+                logger.info(
+                    "Connected to Neo4j AsyncDriver successfully at %s", settings.NEO4J_URI)
             except Exception as e:
                 cls._driver = None
                 raise ConnectionError(
@@ -41,6 +43,7 @@ class Neo4jConnection:
     async def close(cls):
         await cls.reset_driver()
 
+
 async def run_cypher(query: str, parameters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """Execute a Cypher query. Retries once on transient connection failures. Raises on persistent errors."""
     driver = await Neo4jConnection.get_driver()
@@ -51,7 +54,8 @@ async def run_cypher(query: str, parameters: Optional[Dict[str, Any]] = None) ->
             records = await result.data()
             return records
     except (ServiceUnavailable, SessionExpired) as e:
-        logger.warning("Neo4j connection dropped (%s). Resetting driver and retrying once...", e)
+        logger.warning(
+            "Neo4j connection dropped (%s). Resetting driver and retrying once...", e)
         await Neo4jConnection.reset_driver()
         # Retry once after reconnection
         try:
@@ -64,5 +68,6 @@ async def run_cypher(query: str, parameters: Optional[Dict[str, Any]] = None) ->
             logger.error("Neo4j retry also failed: %s", retry_err)
             raise
     except Exception as e:
-        logger.error("Neo4j query execution failed: %s | Query: %.200s", e, query.strip())
+        logger.error(
+            "Neo4j query execution failed: %s | Query: %.200s", e, query.strip())
         raise

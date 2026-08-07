@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from pydantic import ConfigDict, Field
 from pydantic_settings import BaseSettings
 
@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     # Prompt Management Settings
     PROMPTS_DIR: str = "prompts"
+    EXTRACTION_PROMPT: Optional[str] = None
+    CRITIC_PROMPT: Optional[str] = None
 
     model_config = ConfigDict(env_file=".env")
 
